@@ -1,6 +1,6 @@
 {
   "name": "rn-upgrade",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Skills for planning and applying React Native upgrades: apply the Upgrade Helper diff and explain every hunk that fails.",
   "author": {
     "name": "Thiago de Almeida",

@@ -71,6 +71,10 @@ so one failing file never blocks the rest. Then handle these special cases by in
 - Monorepos/workspaces: check every sibling workspace and the root `package.json` for `react`,
   `react-native` and `@react-native/*` versions, plus `overrides`/`resolutions`. Do not change them,
   but report every conflict — mixed versions in one workspace usually mean duplicate React at runtime.
+  Also check where the native build resolves `react-native` from (`settings.gradle` `includeBuild`,
+  `reactNativeDir`/`codegenDir`/`cliFile` in `app/build.gradle`, `require` paths in the Podfile).
+  If they point to a hoisted `node_modules` that another workspace pins to a different version,
+  report it as a build blocker under "Needs a human".
 - Binary files (e.g. `gradle-wrapper.jar`): download the target file from
   `https://raw.githubusercontent.com/react-native-community/rn-diff-purge/release/<TARGET>/RnDiffApp/<path>`.
 - `project.pbxproj`: never regenerate it. If hunks fail, apply the semantic change (the build setting,
