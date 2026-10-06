@@ -1,4 +1,4 @@
-> **About this example.** Unedited output of `apply-upgrade-diff` (v0.1.3) on
+> **About this example.** Output of `apply-upgrade-diff` (v0.1.3) on
 > [react-native-video](https://github.com/TheWidlarzGroup/react-native-video)'s `example/` app, at
 > commit `52696ef5`, run in Claude Code with `/rn-upgrade:apply-upgrade-diff 0.86.3 example`.
 > The only edits are the removal of the agent's local scratch-file paths and of a line about the
