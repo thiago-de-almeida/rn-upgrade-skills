@@ -1,115 +1,123 @@
-> **About this example.** Real output of `apply-upgrade-diff` (v0.1.2) on
+> **About this example.** Unedited output of `apply-upgrade-diff` (v0.1.3) on
 > [react-native-video](https://github.com/TheWidlarzGroup/react-native-video)'s `example/` app, at
-> commit `52696ef5`, run with `/rn-upgrade:apply-upgrade-diff 0.86.3 example`.
-> An independent review checked every changed file against the 0.86.3 template and found no wrong
-> or missing change. Edits after that review: local paths removed, two line numbers corrected
-> (`settings.gradle`, `metro.config.js`), item 10 rewritten (it was wrong), one cause relabeled
-> (`MainApplication.kt`), results normalized to the skill's four values, and the Android
-> manifest-merge consequence added to item 1. Nothing was built.
+> commit `52696ef5`, run in Claude Code with `/rn-upgrade:apply-upgrade-diff 0.86.3 example`.
+> The only edit is the removal of the agent's local scratch-file paths. Nothing was built.
 
-# Upgrade report: example app, React Native 0.77.3 → 0.86.3
+# React Native Upgrade Helper diff applied to `example/` (0.77.3 → 0.86.3)
+
+Everything is uncommitted on branch `chore/example-rn-0.86.3` (base `52696ef5`). Nothing was installed or built. The report was not saved to a file, because no REPORT_PATH was given.
 
 ## 1. Version used
-- **FROM:** 0.77.3, detected. No FROM was passed in, so there is no mismatch to flag.
-  - `bun.lock:3311` resolves `react-native@0.77.3`, and `example/ios/Podfile.lock` has `React-Core (0.77.3)` at line 73.
-  - `node_modules` is not installed, so the lockfiles were the source. The `^0.77.0` in `package.json` was not used.
-- **TARGET:** 0.86.3.
-- **Diff URL:** `https://raw.githubusercontent.com/react-native-community/rn-diff-purge/diffs/diffs/0.77.3..0.86.3.diff` (HTTP 200, 21 files).
-- **Placeholders mapped:**
-  - App name: `RnDiffApp` → `VideoExample`.
-  - Android package: `com.rndiffapp` → `com.twg.videoexample`. The source folder is `com/videoexample`, so the folder and the package name differ.
-- **Project shape:** Kotlin and Swift, bun monorepo with `example` as a workspace, not Expo.
-- **Branch and tree:** the working tree was clean on `chore/example-rn-0.86.3`.
 
-## 2. Per-file table
+- **FROM was not given, so I detected it.**
+  - `bun.lock` resolves `react-native` to 0.77.3 (line 3311).
+  - `example/ios/Podfile.lock:73` has `React-Core (0.77.3)`.
+  - `example/package.json` said `^0.77.0`, and no `node_modules` is installed.
+  - FROM is therefore 0.77.3, and there was no mismatch to flag.
+- **TARGET:** 0.86.3.
+- **Diff URL:** `https://raw.githubusercontent.com/react-native-community/rn-diff-purge/diffs/diffs/0.77.3..0.86.3.diff`. It downloaded fine.
+- **Identifiers used:**
+  - iOS app and Xcode project: `VideoExample`.
+  - Android namespace and applicationId: `com.twg.videoexample`.
+  - Source directory: `com/videoexample` (it does not match the package name).
+  - Kotlin and Swift. This is not Expo.
+  - The app lives in the `example/` workspace of a bun monorepo.
+
+## 2. Per-file results (21 files in the diff)
 
 | file | result | cause | evidence |
 |---|---|---|---|
-| `.gitignore` | applied clean | n/a | `example/.gitignore` +1 line (`.kotlin/`) |
-| `.prettierrc.js` | skipped | Not used | `example/` has no `.prettierrc.js` |
-| `App.tsx` | skipped | Not used | the app entry is `example/src/App.tsx` and `index.js` registers it |
-| `Gemfile` | applied by hand | Base mismatch | file created in `30d58d3a` (monorepo move) without the template's `concurrent-ruby` line, so the hunk context failed |
-| `android/app/build.gradle` | applied clean | n/a | only comments and the `jscFlavor` string changed |
-| `android/app/src/debug/AndroidManifest.xml` | applied clean | n/a (file deleted) | the project's copy was identical to the template. The RN Gradle plugin now supplies the `usesCleartextTraffic` placeholder (checked in `AgpConfiguratorUtils.kt` at v0.86.3) |
-| `android/app/src/main/AndroidManifest.xml` | applied by hand | Customized | the project's PiP and foreground-service attributes sit between the context lines; see §3 |
-| `…/MainApplication.kt` | applied by hand | Diff artifact: whitespace | the project's file is identical to the 0.77.3 template; the helper diff's context is indented differently; see §3 |
-| `android/build.gradle` | applied by hand | Base mismatch | `ndkVersion` 26.1 and `kotlinVersion` 1.9.24 have been there since `30d58d3a`, not the 0.77.3 values |
-| `android/gradle.properties` | applied clean | n/a | adds `edgeToEdgeEnabled=false` |
-| `android/gradle/wrapper/gradle-wrapper.jar` | applied by hand | Binary | downloaded from `release/0.86.3`; `git hash-object` gives `61285a65…`, matching the diff's `index` line |
-| `android/gradle/wrapper/gradle-wrapper.properties` | applied clean | n/a | `gradle-8.10.2-all.zip` → `gradle-9.3.1-bin.zip` |
-| `android/gradlew` | applied clean | n/a | mode 755 kept |
-| `android/gradlew.bat` | applied by hand | Customized (line endings) | the file is CRLF (94 lines) and the patch is LF, so `git apply` rejected it |
-| `ios/Podfile` | applied clean | n/a | removes one comment line |
-| `ios/VideoExample.xcodeproj/project.pbxproj` | applied by hand | Customized | the project still has a live test target; see §3 |
-| `ios/VideoExample/AppDelegate.swift` | applied by hand | Customized (header comment) | the project has an 8-line header comment the template lacks; the rest matched 0.77.3 |
-| `ios/VideoExample/Info.plist` | applied clean | n/a | removes iPhone landscape; flagged in §4 |
-| `jest.config.js` | skipped | Not used | `example/` has no jest dependency or config |
-| `package.json` | applied by hand | Base mismatch / monorepo | see §3 |
-| `tsconfig.json` | applied by hand | Customized | the project extends an array plus `../config/tsconfig.json` |
+| `.gitignore` | applied clean | none | adds `.kotlin/` |
+| `.prettierrc.js` | skipped | Not used | `example/.prettierrc.js` does not exist. It was deleted in `4ba3b7a6` "chore: publish package". No prettier config exists in the repo. |
+| `App.tsx` | skipped | Not used | `example/App.tsx` does not exist; the app is `example/src/App.tsx`. |
+| `Gemfile` | applied by hand | Base mismatch | The project Gemfile never had `gem 'concurrent-ruby'`, which is the hunk's context line. Created in `30d58d3a` "chore(infra): move to monorepo". I added the five Ruby 3.4 gems (`bigdecimal`, `logger`, `benchmark`, `mutex_m`, `nkf`). |
+| `android/app/build.gradle` | applied clean | none | comment updates and the `jsc-android:2026004.+` flavor |
+| `android/app/src/debug/AndroidManifest.xml` | applied clean (deleted) | none | The file was the template's. Its `usesCleartextTraffic="true"` moves to the main manifest (next row). |
+| `android/app/src/main/AndroidManifest.xml` | applied by hand | Customized | The project manifest has PiP, foreground-service and `VideoPlaybackService` additions, so the context lines did not match. I inserted `android:usesCleartextTraffic="${usesCleartextTraffic}"` after `android:theme`. |
+| `…/com/videoexample/MainApplication.kt` | applied clean | Diff artifact: whitespace | It failed plain and applied with `--ignore-whitespace`. The result was misindented, so I replaced it with the 0.86.3 template file with the package swapped to `com.twg.videoexample`. |
+| `android/build.gradle` | applied by hand | Base mismatch | The project had `ndkVersion 26.1.10909125` and `kotlinVersion 1.9.24`, not the 0.77.3 template's `27.1.12297006` and `2.0.21`. These came from `30d58d3a`. |
+| `android/gradle.properties` | applied clean | none | adds `edgeToEdgeEnabled=false` (offset 3) |
+| `gradle/wrapper/gradle-wrapper.jar` | applied by hand | Binary file | Downloaded from the `release/0.86.3` branch. `git hash-object` gives `61285a659d17295f1de7c53e24fdf13ad755c379`, which matches the diff's `index` line. |
+| `gradle-wrapper.properties` | applied clean | none | Gradle 8.10.2-all becomes 9.3.1-bin. |
+| `android/gradlew` | applied clean | none | Identical to the 0.86.3 template. |
+| `android/gradlew.bat` | applied by hand | Diff artifact: line endings | The file is CRLF. I added the Meta header, removed the `CLASSPATH` line and switched to `-jar`. CRLF is kept, and the content equals the template modulo CR. |
+| `ios/Podfile` | applied clean | none | removes one comment line (offset 8) |
+| `…/project.pbxproj` | applied by hand | Customized | See section 3. |
+| `ios/VideoExample/AppDelegate.swift` | applied by hand | Diff artifact | See section 3. |
+| `ios/VideoExample/Info.plist` | applied clean | none | See the orientation question in section 4. |
+| `jest.config.js` | skipped | Not used | The project has no jest config and no `jest` in `example/package.json`. |
+| `package.json` | applied by hand | by intent | See section 3. |
+| `tsconfig.json` | applied by hand | Customized | See section 3. |
+
+**Counts:** applied clean 9, applied by hand 9, skipped 3, needs human 0. That totals 21, and the tally matches the table.
 
 ## 3. Hunks applied by hand
-- **`Gemfile`:** appended the Ruby 3.4 block (`bigdecimal`, `logger`, `benchmark`, `mutex_m`, `nkf`). The project never had the `concurrent-ruby` pin, and the diff does not touch it, so I left it out.
-- **`AndroidManifest.xml` (main):** added `android:usesCleartextTraffic="${usesCleartextTraffic}"` after `android:theme`. The project's `supportsPictureInPicture` attributes, background-audio permissions and `VideoPlaybackService` are untouched. That service entry was added in `235bc3be`.
-- **`MainApplication.kt`:** the project's file is byte-identical to the 0.77.3 template after substitution. The helper diff's context is indented 4 spaces less than the release file, so `git apply` failed (it passes with `--ignore-whitespace`). I wrote the 0.86.3 template content with `package com.twg.videoexample`.
-- **`AppDelegate.swift`:** kept the project's 8-line header comment and wrote the 0.86.3 template body. The two files differ only by that header comment; the body is the new `UIResponder`/`RCTReactNativeFactory` structure.
+
+- **`Gemfile`:** appended the template's Ruby 3.4 gem block after `xcodeproj`. I did not add `concurrent-ruby`, because the diff only uses it as context.
+- **Main `AndroidManifest.xml`:** I checked that the placeholder exists in 0.86.3. `AgpConfiguratorUtils.kt` sets `usesCleartextTraffic` to `"true"` for `debug` and `debugOptimized` and `"false"` for `release`. This is equivalent to the old debug-only manifest.
 - **`android/build.gradle`:**
-  - `buildToolsVersion` → "36.0.0".
-  - `compileSdkVersion` → 36.
-  - `targetSdkVersion` 34 → 36.
-  - `ndkVersion` → "27.1.12297006". This matches `RNVideo_ndkversion` in the library's `gradle.properties`.
-  - `kotlinVersion` → "2.1.20". The library accepts any Kotlin version at or above 1.8.0 (`RNVideo_minKotlinVersion`).
-- **`gradlew.bat`:** edited with a script that keeps CRLF. I added the 4-line Meta header, removed the `set CLASSPATH` line, and switched to `-jar "%APP_HOME%\gradle\wrapper\gradle-wrapper.jar"`.
-- **`project.pbxproj`:** I never regenerated it, and `plutil -lint` passes.
-  - Applied the `shellScript` quoting change on the bundle phase.
-  - Added `SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"` and `TARGETED_DEVICE_FAMILY = "1,2"` to the app target Debug and Release.
-  - Deliberately skipped the hunks that delete the test target pieces. `git apply --reject` had already removed the `00E356EC…` Resources phase, so I reverted that. The `VideoExampleTests` target is live: the scheme has a `TestableReference` for it, and the target depends on `00E356F51…`.
-- **`package.json`** (`react-dom` is not in the template but moved with `react`; each bullet is a change I made):
-  - `react` and `react-dom` → 19.2.3.
-  - `react-native` → 0.86.3, pinned exactly as in the template.
-  - `@react-native/{babel-preset,eslint-config,metro-config,typescript-config}` → 0.86.3.
-  - The three `@react-native-community/cli*` packages → 20.1.0.
-  - `@types/react` → ^19.2.0.
-  - `typescript` → ^5.8.3.
-  - `engines.node` → ">= 22.11.0".
-  - Left alone: `prettier` (template pins 2.8.8, project uses ^3.0.3), `eslint`, and the webpack and web-only packages.
-  - Not added: `@react-native/new-app-screen`, `react-native-safe-area-context`, `@react-native/jest-preset`, `@types/jest` and the other jest or template-app-only packages. The example has no jest and its own `App.tsx`.
-- **`tsconfig.json`:** `"@react-native/typescript-config/tsconfig.json"` → `"@react-native/typescript-config"`. That package now has `exports` with only `.` and `./strict` (checked on npm for 0.86.3), so the subpath no longer resolves. I kept the project's `include` and `types`.
+  - `buildTools` is 36.0.0, and `compileSdk` and `targetSdk` are 36.
+  - `kotlinVersion` is 2.1.20.
+  - `ndkVersion` is 27.1.12297006, the 0.86.3 template value (the diff did not touch it).
+  - The library reads these from `rootProject.ext`, and its `RNVideo_ndkversion` is already 27.1.12297006.
+- **`gradlew.bat`:** details in the table.
+- **`project.pbxproj`:** I reverted the one hunk `git apply` had taken and applied three changes by hand.
+  - The reverted hunk removed `00E356EC… /* Resources */`, which the project's `VideoExampleTests` target still references (`project.pbxproj:152`). Leaving it would have left a dangling reference.
+  - The other test-target removals (proxy, `Supporting Files` group, target dependency) were skipped for the same reason. The project keeps its test target, so those hunks are Customized and not applied.
+  - Applied: the new `shellScript` quoting (matches the diff's `+` line byte for byte) and `SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"` on the Debug and Release app configs.
+  - Applied: `TARGETED_DEVICE_FAMILY = "1,2"` on the Debug and Release app configs.
+  - Both were inserted in sorted order around the project's own `SWIFT_OBJC_BRIDGING_HEADER` and PiP bundle-id lines.
+  - `plutil -lint` passes.
+- **`AppDelegate.swift`:**
+  - The hunk does not apply even to the pristine 0.77.3 template file, so the diff itself is the problem. I tested this in a scratch repo.
+  - The project body equals the 0.77.3 template. The only difference is the project's 8-line Xcode header comment.
+  - I replaced the body with the 0.86.3 template and kept that header.
+- **`package.json`:**
+  - `react` and `react-dom` go to 19.2.3.
+  - `react-native` and `@react-native/{babel-preset,eslint-config,metro-config,typescript-config}` go to `^0.86.3`. I kept the project's caret style.
+  - The three `@react-native-community/cli*` packages go to 20.1.0.
+  - `@types/react` goes to `^19.2.0`, `typescript` to `^5.8.3`, and `engines.node` to `>= 22.11.0`.
+  - Not touched: `prettier` (project `^3.0.3`, the template pins 2.8.8) and `eslint`.
+  - Not added: `@react-native/new-app-screen`, `react-native-safe-area-context`, `@react-native/jest-preset`, `@types/jest`, `jest` and `react-test-renderer`, since the project does not use them.
+- **`tsconfig.json`:** I changed only `extends[0]` to `"@react-native/typescript-config"`. The 0.86.3 package's `exports` map is `{".": "./tsconfig.json", "./strict": …}`, so the old `/tsconfig.json` subpath no longer resolves. The project's own `include` and `compilerOptions` stay, and the template's jest types are not added.
 
-## 4. Needs a human
-1. **Build blocker, hoisted `react-native`.** Root, `packages/react-native-video`, `packages/drm-plugin` and `test-app` stay on 0.77 (`test-app` pins 0.77.3 exactly), and I did not change them. The native builds resolve `react-native` from the hoisted root `node_modules`:
-   - Android: `example/android/settings.gradle:1` and `:6`, plus `reactNativeDir`, `codegenDir`, `cliFile` and `hermesCommand` in `example/android/app/build.gradle`.
-   - After a bun install, `example` will likely have a nested 0.86.3 while Gradle reads the hoisted 0.77.3, and CocoaPods may read the nested 0.86.3. That means native builds are likely to mix versions.
-   - iOS: the Podfile resolves `react-native` from `__dir__` (`example/ios`) upward, which is why CocoaPods may pick a different version than Gradle. This is likely, not confirmed, because nothing is installed yet.
-   - The new `${usesCleartextTraffic}` placeholder in the main manifest is only supplied by the 0.86 Gradle plugin (0.77.3's `AgpConfiguratorUtils.kt` has none), so with the hoisted 0.77.3 plugin the Android manifest merge will fail.
-   - Decide whether to bump the other workspaces or repoint the paths.
-2. **`react-native-web` ^0.19.13 (peer `react ^18`) conflicts with React 19.2.3.** I did not upgrade it. npm shows 0.21.3 accepts React 18 or 19 (not tested against the web build). The example's web target is `example/web/webpack.config.js`.
-3. **Info.plist now drops iPhone landscape.** The template hunk applied clean and removes `LandscapeLeft` and `LandscapeRight` for iPhone. The orientations came from the monorepo move (`30d58d3a`). The app has a fullscreen player (`example/src/App.tsx:52`) and the library has `AVPlayerViewController+Fullscreen.swift`. The library's iOS code never forces an orientation, so fullscreen landscape on iPhone depends on this list. Restore them if landscape fullscreen should work.
-4. **Android `targetSdkVersion` 36 and `edgeToEdgeEnabled=false`.** Both are template values and both applied. The app uses PiP (`supportsPictureInPicture` in the manifest) and fullscreen, so check system-bar and edge-to-edge behavior on Android 16.
-5. **Kotlin 2.1.20 with the library.** The library accepts any Kotlin version at or above 1.8.0, but its default is 1.9.24. It has not been compiled with 2.1 here.
-6. **iOS test target.** The template removed it, but the project keeps `VideoExampleTests`, referenced from the scheme. Decide whether to keep it or remove the whole target.
-7. **Stale Podfile TODO.** The fmt C++17 workaround says "remove after updating RN to 0.84 or later" (`Podfile`, post_install). It is now on 0.86; re-test before removing. `ENV['RCT_NEW_ARCH_ENABLED'] = '1'` in the Podfile also looks redundant, because `react_native_pods.rb` already sets it to "1" when unset. Neither was changed.
-8. **Node 22.11+.** The new engines value will fail on older Node. I did not find a Node version pin in `.github/workflows/*.yml` or `.github/actions/*/action.yml`.
-9. **`metro.config.js` imports `metro-config/src/defaults/exclusionList`** (`example/metro.config.js:4`). That deep import may not survive the newer Metro; I did not check it. It is a JS fix, so it is out of scope.
-10. **Cleartext traffic.** The debug manifest is deleted; the RN Gradle plugin now sets `usesCleartextTraffic` to true for debug/debugOptimized and false for release, the same effective behavior as before. I found no `http://` URLs in `example/src`.
+## 4. Open questions for a human
 
-## 5. Out of scope, still to do
-- Reconcile the workspace versions (item 1), then run `bun install` and refresh `bun.lock`.
-- Run `bundle install` and `pod install`.
-- Upgrade the third-party libraries: `react-native-web`, plus a compatibility check of `react-native-nitro-modules` 0.35.0 and `@react-native-community/slider` against RN 0.86.
-- Fix any JS or native breakage, then build and run on both platforms.
+1. **Build blocker: mixed React Native versions in the monorepo.**
+   - These still pin 0.77:
+     - Root `package.json`: `react-native ^0.77.0` and `react 18.3.1`.
+     - `packages/react-native-video` and `packages/drm-plugin`: `react-native ^0.77.0` and `react 18.3.1`.
+     - `test-app`: `react-native` 0.77.3, `@react-native/*` 0.77.3 and `react` 18.3.1.
+   - Native builds resolve React Native from the hoisted repo-root `node_modules`:
+     - `example/android/settings.gradle` uses `../../node_modules/@react-native/gradle-plugin`.
+     - `example/android/app/build.gradle:14-18` points `reactNativeDir`, `codegenDir` and `cliFile` at `../../../node_modules/…`.
+     - `example/android/app/build.gradle:48` points `hermesCommand` at the same root.
+   - The Podfile resolves from the example directory.
+   - After install the root will likely stay on 0.77.3 and `example` will get a nested 0.86.3, so Gradle and CocoaPods may pick different copies and duplicate React could appear at runtime.
+   - Do you want to bump the other workspaces in lockstep (including the root `@react-native/eslint-config`)?
+   - `docs` already uses react `^19.0.0` and `@types/react ^19.2.0`.
+2. **Third-party lockstep package:** `react-native-web ^0.19.13` has peer `react ^18` (npm registry). With `react` and `react-dom` at 19.2.3 it needs 0.21.x (peers `^18 || ^19`), which is a major bump I did not make. `babel-plugin-react-native-web ^0.19.13` is likely tied to it. Will you approve upgrading the web stack, or should the web target stay on React 18?
+3. **iPhone landscape removed (clean hunk, kept applied).**
+   - `Info.plist:48-52` now allows only Portrait on iPhone; landscape moved to `UISupportedInterfaceOrientations~ipad`. Before, iPhone had Portrait, LandscapeLeft and LandscapeRight.
+   - The example has an "Enter Fullscreen" action (`example/src/App.tsx:415-418`) and an `onFullscreenChange` handler (`:52-55`).
+   - Does fullscreen on iPhone need landscape? If so, restore LandscapeLeft and LandscapeRight to the iPhone array.
+4. **`concurrent-ruby '< 1.3.4'` is not in the Gemfile.** The 0.86.3 template has it and the project never did. Add it, or keep the project's Gemfile as is?
+5. **Test target kept.** `VideoExampleTests` is still in `project.pbxproj`, while the template's orphan cleanup was not applied. Is the Xcode test target still wanted?
+6. **Other template changes to know about:** Gradle goes from `-all` to `-bin`, `edgeToEdgeEnabled=false` is added, and `CADisableMinimumFrameDurationOnPhone` is added to `Info.plist`. The 0.86 Gradle plugin also creates a `debugOptimized` build type.
 
-## Verification
-- No `.rej` or `.orig` files and no conflict markers remain.
-- No `RnDiffApp`, `rndiffapp` or `HelloWorld` strings in the added lines.
+## 5. Next steps (out of scope)
+
+- Resolve questions 1 and 2, then run `bun install` and regenerate `bun.lock`.
+- Run `cd example/ios && bundle install && pod install` to refresh the stale `Podfile.lock`.
+- Confirm Android NDK 27.1.12297006 and the Android 36 SDK are installed, and that JDK 17 or newer is available for Gradle 9.3.1.
+- Build and run on both platforms. Run `tsc` and lint for the example workspace.
+- Check native libraries for 0.86 compatibility: `react-native-nitro-modules` 0.35.0, `@react-native-community/slider` and the local `packages/*`.
+- Check the JS code for React 19 and RN 0.86 API breakage, including the `MainApplication`/`AppDelegate` changes. Review the diff, then commit.
+
+## Verification (static)
+
+- No `.rej` or `.orig` files remain.
+- No conflict markers and no `RnDiffApp`, `rndiffapp` or `HelloWorld` strings in the added lines.
 - `package.json` and `tsconfig.json` parse as JSON.
-- `plutil -lint` passes on `Info.plist` and `project.pbxproj`.
-- `git diff --stat` matches the table: 18 files changed, 98 insertions, 82 deletions. The other three diff files were skipped.
-
-## Counts, from the table
-- Applied clean: 8
-- Applied by hand: 10
-- Skipped: 3
-- Needs human (left unapplied): 0
-- Total: 21
-
-The 10 open questions are in §4.
+- `plutil -lint` is OK on `Info.plist` and `project.pbxproj`.
+- `git diff --stat` shows 18 files changed (98 insertions, 82 deletions), which matches the 9 applied clean plus 9 applied by hand (the deleted debug manifest is among the clean ones).
