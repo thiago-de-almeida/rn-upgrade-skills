@@ -3,7 +3,7 @@ name: apply-upgrade-diff
 description: Use when upgrading a React Native app to a new version and its native/template files (android/, ios/, package.json, Gradle, Podfile, AppDelegate, MainApplication, Info.plist) must follow the React Native Upgrade Helper / rn-diff-purge diff, or when that diff fails to apply because the project was customized.
 argument-hint: <target-version> [app-root] [from-version]
 context: fork
-agent: rn-upgrade-applier
+agent: rn-upgrade:rn-upgrade-applier
 ---
 
 # Apply the React Native Upgrade Helper diff
