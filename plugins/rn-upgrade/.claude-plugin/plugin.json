@@ -1,0 +1,13 @@
+{
+  "name": "rn-upgrade",
+  "version": "0.1.0",
+  "description": "Skills for planning and applying React Native upgrades: apply the Upgrade Helper diff and explain every hunk that fails.",
+  "author": {
+    "name": "Thiago de Almeida",
+    "url": "https://github.com/thiago-de-almeida"
+  },
+  "homepage": "https://github.com/thiago-de-almeida/rn-upgrade-skills",
+  "repository": "https://github.com/thiago-de-almeida/rn-upgrade-skills",
+  "license": "MIT",
+  "keywords": ["react-native", "upgrade", "upgrade-helper", "rn-diff-purge"]
+}
