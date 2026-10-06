@@ -1,11 +1,10 @@
 > **About this example.** Unedited output of `apply-upgrade-diff` (v0.1.3) on
 > [react-native-video](https://github.com/TheWidlarzGroup/react-native-video)'s `example/` app, at
 > commit `52696ef5`, run in Claude Code with `/rn-upgrade:apply-upgrade-diff 0.86.3 example`.
-> The only edit is the removal of the agent's local scratch-file paths. Nothing was built.
+> The only edits are the removal of the agent's local scratch-file paths and of a line about the
+> session's local state. The changes were left uncommitted; nothing was installed or built.
 
 # React Native Upgrade Helper diff applied to `example/` (0.77.3 → 0.86.3)
-
-Everything is uncommitted on branch `chore/example-rn-0.86.3` (base `52696ef5`). Nothing was installed or built. The report was not saved to a file, because no REPORT_PATH was given.
 
 ## 1. Version used
 
