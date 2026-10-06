@@ -7,11 +7,18 @@ Agent skills for React Native upgrades. Each skill does one job in the upgrade's
 
 | Skill | Status | What you get |
 |---|---|---|
-| [`apply-upgrade-diff`](plugins/rn-upgrade/skills/apply-upgrade-diff/SKILL.md) | ✅ available | The Upgrade Helper diff applied to your project, plus a report that explains every hunk that did not apply cleanly (with file:line and commit evidence). |
+| [`apply-upgrade-diff`](plugins/rn-upgrade/skills/apply-upgrade-diff/SKILL.md) | ✅ available | The Upgrade Helper diff applied to your project, plus a report that explains every hunk that did not apply cleanly (with file:line and commit evidence). [Real example](examples/react-native-video-0.77.3-to-0.86.3.md). |
 | `audit-libraries` | 🗓 planned | Which third-party libraries need an upgrade for the target RN version. |
 | `check-android-target` | 🗓 planned | Whether the Android target/compile SDK must move, and what that implies. |
 | `check-ios-target` | 🗓 planned | Whether the iOS deployment target must move, and what that implies. |
 | `estimate-timeline` | 🗓 planned | A timeline built from the reports above. |
+
+## Prerequisites
+
+- A git repository with a clean working tree (commit or stash first).
+- Network access, to download the diff and template files from
+  [rn-diff-purge](https://github.com/react-native-community/rn-diff-purge).
+- macOS for the `plutil` checks on iOS files. Optional: `gh`, to read the PRs behind old commits.
 
 ## Install (Claude Code)
 
@@ -20,18 +27,26 @@ Agent skills for React Native upgrades. Each skill does one job in the upgrade's
 /plugin install rn-upgrade@rn-upgrade-skills
 ```
 
-Then, from the root of your app's repository:
+Install it as a plugin. Copying `SKILL.md` alone into `~/.claude/skills` loses the dedicated
+subagent, and the skill falls back to a general-purpose one.
+
+## Usage
+
+From the root of your app's repository:
 
 ```
 /rn-upgrade:apply-upgrade-diff 0.86.3 .
 ```
 
-Arguments: `<target-version> [app-root] [from-version]`. `app-root` is the folder with the app's
-`package.json`, `android/` and `ios/` (e.g. `example` in a library repo). `from-version` is detected
-from your lockfile when omitted.
+Arguments: `<target-version> <app-root> [from-version]`.
 
-The skill runs in a dedicated subagent (`rn-upgrade-applier`, Sonnet with high effort), leaves all
-changes **uncommitted**, and saves `rn-upgrade-report.md` outside your repo.
+- `app-root` is the folder with the app's `package.json`, `android/` and `ios/`. Use `.` when the
+  app is at the repo root, or e.g. `example` in a library repo.
+- `from-version` is detected from your lockfile when omitted.
+
+The skill runs in a dedicated subagent (`rn-upgrade-applier`, on Sonnet), leaves all changes
+**uncommitted**, and returns the report in your conversation. The main session may summarize it;
+ask Claude to print it in full or save it to a file.
 
 ## Use it with any other agent
 

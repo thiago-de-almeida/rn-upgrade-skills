@@ -1,7 +1,7 @@
 ---
 name: apply-upgrade-diff
 description: Use when upgrading a React Native app to a new version and its native/template files (android/, ios/, package.json, Gradle, Podfile, AppDelegate, MainApplication, Info.plist) must follow the React Native Upgrade Helper / rn-diff-purge diff, or when that diff fails to apply because the project was customized.
-argument-hint: <target-version> [app-root] [from-version]
+argument-hint: <target-version> <app-root> [from-version]
 context: fork
 agent: rn-upgrade:rn-upgrade-applier
 ---
@@ -15,12 +15,12 @@ apply that diff to this project, and to explain every part of it that does not a
 ## Inputs
 
 Arguments: `$ARGUMENTS` — in order: TARGET_VERSION, APP_ROOT, FROM_VERSION.
-(Pasting this prompt into another tool? Replace the arguments line with the values below.)
+(Pasting this prompt into another tool? Replace the arguments line with the values below. You may
+also add REPORT_PATH, a file outside the repo to save the report to.)
 
 - TARGET_VERSION: `<e.g. 0.86.3>`
 - APP_ROOT: `<path to the folder with the app's package.json, android/ and ios/ — "." if it is the repo root>`
 - FROM_VERSION (optional): `<e.g. 0.79.0>` — if omitted, detect it.
-- REPORT_PATH (optional): `<where to save the report>` — if omitted, save it as `rn-upgrade-report.md` next to the downloaded diff, outside the repo.
 
 If TARGET_VERSION or APP_ROOT is missing or still a `<placeholder>`, stop before touching anything
 and report which input is missing. Do not infer them from branch names, commits or the latest release.
@@ -51,7 +51,8 @@ and report which input is missing. Do not infer them from branch names, commits 
 
 1. Download the raw diff the Upgrade Helper uses:
    `https://raw.githubusercontent.com/react-native-community/rn-diff-purge/diffs/diffs/<FROM>..<TARGET>.diff`
-   Save it outside the repo. If the URL 404s, the version pair does not exist — stop and report.
+   Download it with `curl -fsSL` (not a web-page fetch tool, which returns a summary instead of the
+   raw file) and save it outside the repo. If the URL 404s, the version pair does not exist — stop and report.
 2. Rewrite it for this project: strip the `RnDiffApp/` path prefix (and add APP_ROOT if needed), and
    replace `RnDiffApp`, `rndiffapp`, `com.rndiffapp` and `com/rndiffapp` with the project's identifiers.
    Keep the original diff too; you will reference it in the report.
@@ -60,7 +61,15 @@ and report which input is missing. Do not infer them from branch names, commits 
 ## Step 3 — Apply file by file
 
 Split the diff per file and apply each one separately (e.g. `git apply --reject --whitespace=nowarn`),
-so one failing file never blocks the rest. Then handle these special cases by intent, not by patch:
+so one failing file never blocks the rest. The diff's context lines are not always
+whitespace-faithful, so before investigating a failed file:
+
+- Retry it with `--ignore-whitespace`. If it applies, record it as `applied clean` with the cause
+  "Diff artifact: whitespace".
+- If the file uses CRLF line endings (e.g. `gradlew.bat`), apply the change by hand and keep the
+  file's line endings. Record it as `applied by hand` with the cause "Diff artifact: line endings".
+
+Then handle these special cases by intent, not by patch:
 
 - `package.json`: bump only `react-native`, `react`, `@react-native/*` and the template's tooling
   devDependencies to the target template's versions. Keep everything else the project has.
@@ -68,6 +77,10 @@ so one failing file never blocks the rest. Then handle these special cases by in
   them (`react-dom`, `@types/react`, `react-test-renderer`, …) — a `react`/`react-dom` mismatch breaks
   web and test setups. If a lockstep package forces a third-party upgrade (e.g. `react-native-web`
   needs a new major for the new `react`), do not upgrade it: list it under "Needs a human".
+  Never downgrade a package the project already has at a newer version (the template pins tooling
+  such as `prettier` and `eslint`). Never add packages only the template's sample app uses
+  (`@react-native/new-app-screen`, `react-native-safe-area-context`, jest/`react-test-renderer`
+  and their types) unless the project already uses them.
 - Monorepos/workspaces: check every sibling workspace and the root `package.json` for `react`,
   `react-native` and `@react-native/*` versions, plus `overrides`/`resolutions`. Do not change them,
   but report every conflict — mixed versions in one workspace usually mean duplicate React at runtime.
@@ -75,8 +88,9 @@ so one failing file never blocks the rest. Then handle these special cases by in
   `reactNativeDir`/`codegenDir`/`cliFile` in `app/build.gradle`, `require` paths in the Podfile).
   If they point to a hoisted `node_modules` that another workspace pins to a different version,
   report it as a build blocker under "Needs a human".
-- Binary files (e.g. `gradle-wrapper.jar`): download the target file from
-  `https://raw.githubusercontent.com/react-native-community/rn-diff-purge/release/<TARGET>/RnDiffApp/<path>`.
+- Binary files (e.g. `gradle-wrapper.jar`): download the target file with `curl -fsSL` from
+  `https://raw.githubusercontent.com/react-native-community/rn-diff-purge/release/<TARGET>/RnDiffApp/<path>`,
+  then check that `git hash-object <file>` matches the new hash on the diff's `index` line.
 - `project.pbxproj`: never regenerate it. If hunks fail, apply the semantic change (the build setting,
   the phase, the flag) by hand in the right place.
 - New, deleted and renamed files: create/delete/rename them only if the project uses the template's
@@ -99,6 +113,8 @@ could not apply), find out WHY this project differs from a standard React Native
    - **Not used** — the project does not use this template file (sample `App.tsx`, template tests,
      lint config, README). Skip, unless it affects the build.
    - **Base mismatch** — the project never had the FROM template's version of this code. Apply by intent.
+   - **Diff artifact** — the project matches the FROM template, and only whitespace or line endings
+     made the patch fail (see Step 3). Not a project difference.
    - **Needs a human** — you cannot decide safely. Do NOT guess: leave it unapplied and write the
      exact question a human must answer.
 
@@ -106,8 +122,8 @@ Then review the hunks that applied CLEANLY too. A clean apply only means the pro
 template's old code — not that the new default fits this app. For every clean hunk that removes or
 restricts something (supported orientations, permissions, manifest attributes, build flags, deleted
 files), check whether the app relies on it — e.g. a video player that goes fullscreen in landscape
-needs landscape orientations. If it does, keep the hunk applied but list it under "Needs a human"
-with the evidence (where the app uses it).
+needs landscape orientations. If it does, keep the hunk applied (its result stays `applied clean`)
+and list it under "Needs a human" in the report, with the evidence (where the app uses it).
 
 ## Step 5 — Verify (static checks only, no build)
 
@@ -118,15 +134,17 @@ with the evidence (where the app uses it).
 
 ## Step 6 — Report
 
-Save the report to REPORT_PATH as Markdown with these sections:
+Write the report in Markdown with these sections:
 
 1. Version used (FROM → TARGET), mismatches found, and the diff URL.
 2. A table with one row per file of the diff:
-   `file | result (applied clean / applied by hand / skipped / needs human) | cause | evidence`.
+   `file | result | cause | evidence`. Use exactly one of these results: `applied clean`,
+   `applied by hand`, `skipped`, `needs human` (left unapplied pending a decision).
+   A deleted file counts as applied. Add the count per result, taken from the table.
 3. Every hunk applied by hand: what you changed and why it is equivalent to the template's intent.
 4. Open questions for a human, including lockstep packages that need a third-party upgrade,
    workspace version conflicts, and clean hunks that remove something the app relies on.
 5. Next steps that were out of scope (install, pods, library upgrades, build), as a short list.
 
-Then reply with the report's path and a short summary: the count of files per result (taken from the
-saved table, not recounted from memory) and the open questions.
+Return the full report, all sections, as your final message. If REPORT_PATH was given and your
+environment allows writing it, also save the report there; otherwise state that it was not saved.
