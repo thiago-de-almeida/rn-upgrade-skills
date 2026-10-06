@@ -52,7 +52,8 @@ ask Claude to print it in full or save it to a file.
 
 ## Install (Codex)
 
-Ask Codex to install the standalone skill from this repository:
+Ask Codex to install the standalone skill from this repository. The installer puts it in
+`~/.codex/skills/` (user scope):
 
 ```text
 $skill-installer Install https://github.com/thiago-de-almeida/rn-upgrade-skills/tree/main/skills/apply-upgrade-diff
@@ -68,12 +69,11 @@ cp -R /path/to/rn-upgrade-skills/skills/apply-upgrade-diff .agents/skills/
 ```
 
 For use across projects, copy it to `~/.agents/skills/` instead. Install it in only one
-scope to avoid duplicate entries. Codex detects new skills automatically; restart it if
-the skill does not appear. See [Codex skill documentation](https://developers.openai.com/codex/skills/).
+scope (installer, repo or user folder) to avoid duplicate entries. Codex detects new skills
+automatically; restart it if the skill does not appear. See the
+[Codex skill documentation](https://learn.chatgpt.com/docs/build-skills).
 
-This installs the self-contained skill; the Claude Code plugin and its dedicated subagent
-are not needed. If the repository is private, the installer needs GitHub access; use the
-manual copy method if you already have an authenticated clone.
+This installs the self-contained skill; the Claude Code plugin and its subagent are not needed.
 
 ## Usage (Codex)
 
@@ -83,19 +83,23 @@ From the root of your app's repository:
 $apply-upgrade-diff TARGET_VERSION=0.86.3 APP_ROOT=.
 ```
 
+Positional arguments work too, in the same order as in Claude Code: `$apply-upgrade-diff 0.86.3 .`
+
 For a library example or a known starting version:
 
 ```text
 $apply-upgrade-diff TARGET_VERSION=0.86.3 APP_ROOT=example FROM_VERSION=0.77.3
 ```
 
-`FROM_VERSION` is optional and detected from the resolved version when omitted. You may also
+`FROM_VERSION` is optional and detected from your lockfile when omitted. You may also
 provide `REPORT_PATH` outside the app's repository to save the full report.
 
 Codex runs the workflow in the current session, leaves changes **uncommitted**, and returns
-the full report. The same prerequisites and upgrade scope apply to both hosts.
-For a repo-local installation, commit the skill files before running it so the app's working
-tree passes the clean-tree preflight.
+the full report. The same prerequisites and upgrade scope apply to both hosts. Use a high
+reasoning effort: the skill investigates every failed hunk in the code and git history.
+
+The skill stops if the app's working tree is not clean. With a repo-local installation, either
+commit `.agents/` or add it to `.git/info/exclude` before running it.
 
 ## Use it with any other agent
 
