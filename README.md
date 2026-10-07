@@ -10,17 +10,28 @@ Available as a Claude Code plugin and a standalone Codex skill.
 | Skill | Status | What you get |
 |---|---|---|
 | [`apply-upgrade-diff`](plugins/rn-upgrade/skills/apply-upgrade-diff/SKILL.md) | ✅ available | The Upgrade Helper diff applied to your project, plus a report that explains every hunk that did not apply cleanly (with file:line and commit evidence). [Real example](examples/react-native-video-0.77.3-to-0.86.3.md). |
-| `audit-libraries` | 🗓 planned | Which third-party libraries need an upgrade for the target RN version. |
+| [`audit-libraries`](plugins/rn-upgrade/skills/audit-libraries/SKILL.md) | ✅ available | Which third-party libraries must be upgraded, replaced or patched for the target RN version, which of their breaking changes affect your code, and a JSON block for the timeline. Report only: it changes nothing. |
 | `check-android-target` | 🗓 planned | Whether the Android target/compile SDK must move, and what that implies. |
 | `check-ios-target` | 🗓 planned | Whether the iOS deployment target must move, and what that implies. |
 | `estimate-timeline` | 🗓 planned | A timeline built from the reports above. |
 
 ## Prerequisites
 
+`apply-upgrade-diff`:
+
 - A git repository with a clean working tree (commit or stash first).
 - Network access, to download the diff and template files from
   [rn-diff-purge](https://github.com/react-native-community/rn-diff-purge).
 - macOS for the `plutil` checks on iOS files. Optional: `gh`, to read the PRs behind old commits.
+
+`audit-libraries`:
+
+- Node 18 or newer, to run the bundled inventory script (no dependencies to install).
+- Network access to the npm registry, jsDelivr, React Native Directory and GitHub.
+  Optional: `gh`, to read releases and issues.
+- No clean working tree needed: it does not change files. Run it before or after
+  `apply-upgrade-diff`; after, it audits the versions still in your lockfile and flags it as stale.
+- Bare apps that use Expo modules are covered: the target Expo SDK decides those versions. Managed Expo apps (no committed `android/` and `ios/`) are out of scope; move to the matching SDK and use `npx expo install --check` instead.
 
 ## Install (Claude Code)
 
@@ -38,16 +49,17 @@ From the root of your app's repository:
 
 ```
 /rn-upgrade:apply-upgrade-diff 0.86.3 .
+/rn-upgrade:audit-libraries 0.86.3 .
 ```
 
-Arguments: `<target-version> <app-root> [from-version]`.
+Both skills take the same arguments: `<target-version> <app-root> [from-version]`.
 
 - `app-root` is the folder with the app's `package.json`, `android/` and `ios/`. Use `.` when the
   app is at the repo root, or e.g. `example` in a library repo.
 - `from-version` is detected from your lockfile when omitted.
 
-The skill runs in a dedicated subagent (`rn-upgrade-applier`, on Sonnet), leaves all changes
-**uncommitted**, and returns the report in your conversation. The main session may summarize it;
+Each skill runs in a dedicated subagent on Sonnet (`rn-upgrade-applier` leaves all changes
+**uncommitted**; `rn-upgrade-auditor` only reads) and returns the report in your conversation. The main session may summarize it;
 ask Claude to print it in full or save it to a file.
 
 ## Install (Codex)
@@ -57,6 +69,7 @@ Ask Codex to install the standalone skill from this repository. The installer pu
 
 ```text
 $skill-installer Install https://github.com/thiago-de-almeida/rn-upgrade-skills/tree/main/skills/apply-upgrade-diff
+$skill-installer Install https://github.com/thiago-de-almeida/rn-upgrade-skills/tree/main/skills/audit-libraries
 ```
 
 Alternatively, clone this repository and copy the skill into your app's `.agents/skills`
@@ -66,7 +79,10 @@ with your clone's path):
 ```sh
 mkdir -p .agents/skills
 cp -R /path/to/rn-upgrade-skills/skills/apply-upgrade-diff .agents/skills/
+cp -R /path/to/rn-upgrade-skills/skills/audit-libraries .agents/skills/
 ```
+
+Copy the whole folder: `audit-libraries` ships a `scripts/` folder next to its `SKILL.md`.
 
 For use across projects, copy it to `~/.agents/skills/` instead. Install it in only one
 scope (installer, repo or user folder) to avoid duplicate entries. Codex detects new skills
@@ -98,15 +114,18 @@ Codex runs the workflow in the current session, leaves changes **uncommitted**, 
 the full report. The same prerequisites and upgrade scope apply to both hosts. Use a high
 reasoning effort: the skill investigates every failed hunk in the code and git history.
 
-The skill stops if the app's working tree is not clean. With a repo-local installation, either
+`$audit-libraries` takes the same inputs. It needs network access: approve it when Codex asks,
+or run Codex with network enabled for the session.
+
+`$apply-upgrade-diff` stops if the app's working tree is not clean. With a repo-local installation, either
 commit `.agents/` or add it to `.git/info/exclude` before running it.
 
 ## Use it with any other agent
 
-The skill is plain Markdown. Copy the body of
-[`SKILL.md`](plugins/rn-upgrade/skills/apply-upgrade-diff/SKILL.md) (everything after the `---`
+The skills are plain Markdown. Copy the body of a `SKILL.md` (everything after the `---`
 frontmatter), fill in the **Inputs** section, and paste it into any agent that can run shell
-commands, use git and reach the internet. A plain chat without tools will not work.
+commands, use git and reach the internet. A plain chat without tools will not work. For
+`audit-libraries`, replace `${CLAUDE_SKILL_DIR}` with the path of the skill folder in your clone.
 
 ## What `apply-upgrade-diff` does not do
 
@@ -114,20 +133,26 @@ It applies the template diff and explains it. It does **not** install dependenci
 `pod install`, upgrade libraries, build the app, or commit. Those are your next steps, and the
 report lists them.
 
+## What `audit-libraries` does not do
+
+It reads and reports. It does **not** edit `package.json`, install, upgrade libraries, fix your
+code for their breaking changes, or audit the packages the RN template owns (`react`,
+`@react-native/*`, babel, eslint, typescript): `apply-upgrade-diff` handles those.
+
 ## Contributing
 
-The Claude Code workflow is the source of truth. After changing
-`plugins/rn-upgrade/skills/apply-upgrade-diff/SKILL.md`, regenerate the standalone Codex
-version and verify that it is current:
+The Claude Code workflows in `plugins/rn-upgrade/skills/` are the source of truth. After
+changing one, regenerate the standalone Codex versions and verify that they are current:
 
 ```sh
 python3 scripts/sync-codex-skill.py
 python3 scripts/sync-codex-skill.py --check
+node --test tests/*.test.mjs
 ```
 
-The adapter keeps the upgrade procedure unchanged and replaces only Claude-specific metadata
-and argument handling. Commit the generated `skills/apply-upgrade-diff/SKILL.md` with the source
-change; Codex users do not need Python to run the installed skill.
+The adapter keeps each procedure unchanged, replaces only Claude-specific metadata and argument
+handling, and copies each skill's `scripts/` folder. Commit the generated `skills/` files with the
+source change; Codex users do not need Python to run the installed skills.
 
 Ran a skill on your project and the report got something wrong? Open an issue with the RN versions,
 the part of the report that was wrong, and (if you can share it) the relevant snippet of the report.
