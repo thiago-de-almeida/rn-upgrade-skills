@@ -160,3 +160,9 @@ test("CLI: works through a symlink, rejects a bad --out", async () => {
     assert.throws(() => execFileSync("node", [RENDERER, ...args], { stdio: "pipe" }), (e) => e.status === 1 && /render-html: /.test(String(e.stderr)));
   }
 });
+
+test("a code span inside a link URL stays out of the href, and list types do not merge", () => {
+  assert.ok(!inline("[b](https://c.com/`q`)").includes('href="https://c.com/<code>'));
+  const { html } = markdownToHtml("1. a\n\n- b\n\n2. c\n");
+  assert.match(html, /<ol><li>a<\/li><\/ol>\n<ul><li>b<\/li><\/ul>\n<ol start="2"><li>c<\/li><\/ol>/);
+});

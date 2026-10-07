@@ -44,7 +44,7 @@ function inlineInto(text, stash) {
   const keep = (html) => `\u0000${stash.push(html) - 1}\u0000`;
   const out = text
     .replace(/`([^`]+)`/g, (_, code) => keep(`<code>${esc(code)}</code>`))
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (all, label, url) =>
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (all, label, url) => url.includes("\u0000") ? all :
       keep(safeUrl(url) ? `<a href="${esc(url)}">${inlineInto(label, stash)}</a>` : inlineInto(label, stash)));
   return esc(out)
     .replace(/https?:\/\/[^\s<>"'\u0000]+/g, (url) => {
@@ -130,7 +130,9 @@ export function markdownToHtml(md, { reserved = [] } = {}) {
           // A blank line keeps the list going when the next item follows it.
           let next = i + 1;
           while (next < lines.length && !lines[next].trim()) next++;
-          if (next < lines.length && LIST.test(lines[next])) i = next - 1;
+          const after = LIST.exec(lines[next] ?? "");
+          // Only the same kind of list continues; "1. a" then "- b" are two lists.
+          if (after && (after[1].length > items.at(-1).indent || /\d/.test(after[2]) === items.at(-1).ordered)) i = next - 1;
           else break;
         } else if (/^\s+/.test(lines[i]) && items.length && !/^\s*```/.test(lines[i])) {
           items.at(-1).text += " " + lines[i].trim();
