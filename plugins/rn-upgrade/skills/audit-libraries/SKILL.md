@@ -16,7 +16,8 @@ to move to, and which of its breaking changes affect this app. Your ONLY output 
 
 Arguments: `$ARGUMENTS` — in order: TARGET_VERSION, APP_ROOT, FROM_VERSION.
 (Pasting this prompt into another tool? Replace the arguments line with the values below. You may
-also add REPORT_PATH, a file outside the repo to save the report to.)
+also add REPORT_PATH, a file outside the repo to save the report to, and HTML=no to skip the HTML
+page saved next to it.)
 
 - TARGET_VERSION: `<e.g. 0.86.3>`
 - APP_ROOT: `<path to the folder with the app's package.json, android/ and ios/ — "." if it is the repo root>`
@@ -248,3 +249,8 @@ Write the report in Markdown with these sections:
 
 Return the full report, all sections, as your final message. If REPORT_PATH was given and your
 environment allows writing it, also save the report there; otherwise state that it was not saved.
+
+If you saved the report and HTML is not `no`, run
+`node "${CLAUDE_SKILL_DIR}/scripts/render-html.mjs" "<REPORT_PATH>"`: it writes a self-contained HTML
+page next to the report and prints its path. End your final message with `HTML report: <path>`. If
+the script fails, say so in one line. Never write the HTML yourself.

@@ -16,7 +16,7 @@ to move to, and which of its breaking changes affect this app. Your ONLY output 
 Read TARGET_VERSION, APP_ROOT, and optional FROM_VERSION from the user's request, either as
 `KEY=VALUE` pairs (`$audit-libraries TARGET_VERSION=0.86.3 APP_ROOT=.`) or positionally in that
 order (`$audit-libraries 0.86.3 .`). The user may also provide REPORT_PATH, a file outside the
-app's repo to save the report to.
+app's repo to save the report to, and HTML=no to skip the HTML page saved next to it.
 Follow this workflow exactly, stay inside its scope, and back every claim in your report with
 evidence (file:line, commit SHA, command output).
 `<SKILL_DIR>` below is the folder that contains this SKILL.md, not the current directory. Resolve
@@ -252,3 +252,8 @@ Write the report in Markdown with these sections:
 
 Return the full report, all sections, as your final message. If REPORT_PATH was given and your
 environment allows writing it, also save the report there; otherwise state that it was not saved.
+
+If you saved the report and HTML is not `no`, run
+`node "<SKILL_DIR>/scripts/render-html.mjs" "<REPORT_PATH>"`: it writes a self-contained HTML
+page next to the report and prints its path. End your final message with `HTML report: <path>`. If
+the script fails, say so in one line. Never write the HTML yourself.
