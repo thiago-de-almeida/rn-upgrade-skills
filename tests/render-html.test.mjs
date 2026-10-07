@@ -11,8 +11,11 @@ const SKILLS = "plugins/rn-upgrade/skills";
 const RENDERER = `${SKILLS}/audit-libraries/scripts/render-html.mjs`;
 const count = (text, needle) => text.split(needle).length - 1;
 
-test("both skills ship the same renderer", () => {
-  assert.equal(readFileSync(`${SKILLS}/apply-upgrade-diff/scripts/render-html.mjs`, "utf8"), readFileSync(RENDERER, "utf8"));
+test("both skills ship the same renderer and fonts", () => {
+  for (const file of ["render-html.mjs", "render-html-fonts.mjs"]) {
+    assert.equal(readFileSync(`${SKILLS}/apply-upgrade-diff/scripts/${file}`, "utf8"),
+      readFileSync(`${SKILLS}/audit-libraries/scripts/${file}`, "utf8"), file);
+  }
 });
 
 test("markdown: headings get unique ids, tables keep escaped pipes", () => {
@@ -51,12 +54,15 @@ test("audit page: dashboard from the data block, full report below", () => {
   const html = renderPage(md, { source: "rocket-chat.md" });
   const { data } = extractData(md);
   assert.equal(count(html, 'class="row"'), data.libraries.length);
-  assert.match(html, /data-tile="audited"[^>]*>[\s\S]*?>79</);
+  assert.match(html, /<p class="thesis"><b>32<\/b> of 79 libraries must change for 0\.86\.3\./);
+  assert.equal(count(html, 'class="cell"'), data.libraries.length);
+  assert.match(html, /<span class="stop"><span>0\.82<\/span><\/span>/);
   assert.match(html, /data-verdict="major bump"/);
   assert.match(html, /id="full-report"/);
   assert.match(html, /href="#react-native-skeleton-placeholder/);
+  assert.match(html, /<nav class="toc"/);
   assert.ok(!/<script>(?!\s*(const|"use strict"))/.test(html.replace(/<script type="application\/json"[\s\S]*?<\/script>/g, "")));
-  assert.ok(!html.includes("http://") || !/<link|src="http/.test(html), "no external resources");
+  assert.ok(!/<link\b|\bsrc="https?:|url\(https?:/.test(html), "no external resources");
 });
 
 test("diff page: results, hand-applied hunks and questions from the data block", () => {
@@ -79,6 +85,7 @@ test("diff page: results, hand-applied hunks and questions from the data block",
   assert.match(html, /data-result="needs human"/);
   assert.match(html, /Conflict &lt;x&gt;/);
   assert.match(html, /kept the flavor block/);
+  assert.match(html, /<b>1<\/b> of 3 template files applied cleanly\. 1 needed a hand edit and <b>1<\/b> waits for a human\./);
   assert.match(html, /Keep the custom Podfile hook\?/);
 });
 
