@@ -1,4 +1,4 @@
-> **About this example.** Output of `audit-libraries` (v0.2.0, commit `2d7a618`) on
+> **About this example.** Output of `audit-libraries` (v0.2.0) on
 > [Rocket.Chat.ReactNative](https://github.com/RocketChat/Rocket.Chat.ReactNative) at commit
 > `8453d9a`, before the team's own upgrade to React Native 0.86.3. It was run in Claude Code by a
 > general-purpose agent on Opus that followed `SKILL.md` exactly, not through
@@ -7,7 +7,8 @@
 > unedited. Rocket.Chat's real upgrade is public
 > ([#7691](https://github.com/RocketChat/Rocket.Chat.ReactNative/pull/7691),
 > [#7693](https://github.com/RocketChat/Rocket.Chat.ReactNative/pull/7693)–[#7696](https://github.com/RocketChat/Rocket.Chat.ReactNative/pull/7696)),
-> so you can compare the two.
+> so you can compare the two. The [HTML version](rocket-chat-0.81.5-to-0.86.3.html) was rendered
+> by the skill's bundled script.
 
 # React Native library audit — Rocket.Chat.ReactNative, 0.81.5 → 0.86.3
 
