@@ -65,7 +65,10 @@ What it gives you:
   Expo): `mode`, the `installed` `expo` version, and `targetSdk`, the Expo SDK that bundles the target
   React Native.
 - `dependencies[]`: one record per dependency of the app, plus the `dependencies` and
-  `peerDependencies` of first-party workspace packages the app uses (`via`). Each has a `class`:
+  `peerDependencies` of first-party workspace packages the app uses, directly or through other
+  workspaces (`via`). A library installed at two versions (e.g. the app on 2.x, a workspace on 1.x),
+  or from npm and from a git fork, has one record each: audit both. `declaredBy` lists every owner
+  that shares a record, with its range. Each has a `class`:
   - `candidate` — native code, a `react-native` peer, or a `react` peer that rejects the target `react`. **Audit these.**
   - `companion` — tied to a candidate (same repository or name). It moves with that candidate.
   - `handled-by-diff` — owned by the RN template or in lockstep with `react`. Not audited here.
@@ -80,8 +83,9 @@ What it gives you:
 - `override` means a root `overrides`/`resolutions`/`pnpm.overrides` forces the version: report it,
   and check the override still makes sense on the target.
 - `resolvedFrom: "range"` means the version was not read from a lockfile: say so in the report.
-  `lockStale: true` means the lockfile does not satisfy `package.json` (e.g. after
+  `lockStale: true` means the lockfile does not satisfy a `package.json` (e.g. after
   `apply-upgrade-diff` bumped it without an install): audit the locked version and flag it.
+  `declaredBy` says which owners' ranges it breaks.
 - `directory`: React Native Directory data. It describes the library's **latest** version only.
 - `errors` and `warnings`: sources that failed. A candidate with missing facts needs more evidence, not a guess.
 

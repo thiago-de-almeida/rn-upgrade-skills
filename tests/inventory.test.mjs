@@ -141,3 +141,15 @@ test("companion names ignore scopes and generic names", () => {
   assert.ok(!namesMatch("react-native-animatable", "@bugsnag/react-native"));
   assert.ok(!namesMatch("react-native-easy-grid", "react-native"));
 });
+
+test("yarn.lock: berry entries with several specs in one quoted key", () => {
+  const berry = parseYarnLock(`__metadata:
+  version: 8
+
+"d@npm:^1.0.0, d@npm:^1.1.0":
+  version: 1.2.0
+  resolution: "d@npm:1.2.0"
+`);
+  assert.equal(berry["d@npm:^1.0.0"], "1.2.0");
+  assert.equal(berry["d@npm:^1.1.0"], "1.2.0");
+});

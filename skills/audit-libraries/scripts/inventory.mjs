@@ -223,7 +223,8 @@ export function parseYarnLock(text) {
   for (const line of text.split("\n")) {
     if (!line.trim() || line.startsWith("#")) continue;
     if (!/^\s/.test(line)) {
-      current = line.replace(/:\s*$/, "").split(/,\s*/).map(unquote);
+      // Classic quotes each spec ("a@^1", "a@^2"); berry quotes the whole list ("a@npm:^1, a@npm:^2").
+      current = line.replace(/:\s*$/, "").split(/,\s*/).map((spec) => spec.trim().replace(/^["']|["']$/g, ""));
       continue;
     }
     const m = /^\s+version:?\s+(.+)$/.exec(line);
@@ -265,7 +266,7 @@ function loadLock(repoRoot, appRoot) {
         file: "package-lock.json",
         lookup: (owner, name) => {
           const rel = relative(dir, owner.dir);
-          const entry = (rel && lock.packages?.[`${rel}/node_modules/${name}`]) ??
+          const entry = (rel ? lock.packages?.[`${rel}/node_modules/${name}`] : undefined) ??
             lock.packages?.[`node_modules/${name}`] ?? lock.dependencies?.[name];
           if (!entry) return null;
           if (entry.link) return { name, version: null, workspace: entry.resolved };
@@ -549,41 +550,63 @@ export async function inventory({ appRoot: appRootArg, target, from }) {
   // Dependency records.
   const appOwner = { name: appPkg.name, dir: appRoot };
   const overrides = { ...rootPkg.resolutions, ...rootPkg.overrides, ...rootPkg.pnpm?.overrides };
+  // One record per package, source and installed version: the app and a workspace on different
+  // versions of a library, or on npm and a git fork of it, get one record each. Owners that share a
+  // record keep their own range in declaredBy.
   const records = new Map();
+  const isWorkspaceDep = (name, range, locked) =>
+    workspaces.has(name) || Boolean(locked?.workspace) || String(range).startsWith("workspace:");
   const addRecord = (name, range, section, owner, via) => {
-    const existing = records.get(name);
+    const locked = lockLookup(owner, name, range);
+    const source = nonRegistrySource(range);
+    const key = isWorkspaceDep(name, range, locked) ? name : `${name}@${source ?? "npm"}:${locked?.version ?? range}`;
+    const declaration = { owner: owner.name ?? null, section, range, lockStale: false };
+    const existing = records.get(key);
     if (existing) {
       if (via && !existing.via.includes(via)) existing.via.push(via);
-      return;
+      if (!existing.declaredBy.some((d) => d.owner === declaration.owner && d.range === range)) {
+        existing.declaredBy.push(declaration);
+      }
+      return null;
     }
-    records.set(name, {
-      name, section, declaredRange: range, owner: owner.name ?? null, ownerDir: owner.dir, via: via ? [via] : [],
+    const record = {
+      name, section, declaredRange: range, declaredBy: [declaration], owner: owner.name ?? null, ownerDir: owner.dir, via: via ? [via] : [],
       resolvedVersion: null, resolvedFrom: null, lockStale: false, class: null, reason: null,
       native: null, peers: null, latest: null, majorsBehind: null, dates: null, directory: null,
-      repository: null, companionOf: null, expoRecommended: null, source: nonRegistrySource(range),
+      repository: null, companionOf: null, expoRecommended: null, source,
       lockedRef: null, override: null, errors: [],
-    });
+    };
+    records.set(key, record);
+    return record;
   };
   for (const section of ["dependencies", "devDependencies"]) {
     for (const [name, range] of Object.entries(appPkg[section] ?? {})) addRecord(name, range, section, appOwner, null);
   }
 
-  // First-party packages: their peers and dependencies are audited on their behalf.
-  for (const record of [...records.values()]) {
-    const locked = lockLookup(appOwner, record.name, record.declaredRange);
-    if (!workspaces.has(record.name) && !locked?.workspace && !String(record.declaredRange).startsWith("workspace:")) continue;
+  // First-party packages: their peers and dependencies are audited on their behalf, through any
+  // chain of workspaces (app → a → b → library).
+  const queue = [...records.values()];
+  const visited = new Set([appPkg.name]);
+  while (queue.length) {
+    const record = queue.shift();
+    const owner = { name: record.owner, dir: record.ownerDir };
+    const locked = lockLookup(owner, record.name, record.declaredRange);
+    if (!isWorkspaceDep(record.name, record.declaredRange, locked)) continue;
     record.class = "first-party";
     record.reason = "workspace package of this repo";
+    if (visited.has(record.name)) continue;
+    visited.add(record.name);
     const dir = workspaces.get(record.name) ?? (locked?.workspace ? join(repoRoot, locked.workspace) : null);
-    if (!dir) continue;
+    if (!dir || !existsSync(join(dir, "package.json"))) continue;
     const pkg = readJson(join(dir, "package.json"));
     for (const section of ["peerDependencies", "dependencies"]) {
       for (const [name, range] of Object.entries(pkg[section] ?? {})) {
-        if (workspaces.has(name)) continue;
-        addRecord(name, range, `${section} of ${record.name}`, { name: record.name, dir }, record.name);
+        const added = addRecord(name, range, `${section} of ${record.name}`, { name: record.name, dir }, record.name);
+        if (added) queue.push(added);
       }
     }
   }
+  const named = (name) => [...records.values()].filter((r) => r.name === name);
 
   // Resolve versions.
   await pool([...records.values()].filter((r) => r.class !== "first-party"), 8, async (record) => {
@@ -594,20 +617,21 @@ export async function inventory({ appRoot: appRootArg, target, from }) {
       // A fork, a tarball or a local package: npm facts describe the upstream package, not what is installed.
       record.lockedRef = locked?.version ?? null;
       record.resolvedFrom = lock?.file ?? null;
+    } else if (locked?.version) {
+      // The lockfile is local: read it before the registry, so a registry failure keeps the version.
+      record.resolvedVersion = locked.version;
+      record.resolvedFrom = lock.file;
+      for (const d of record.declaredBy) {
+        d.lockStale = !record.override && /^[~^<>=\w\s|*.-]+$/.test(d.range) && !satisfies(locked.version, d.range);
+      }
+      record.lockStale = record.declaredBy.some((d) => d.lockStale);
     }
     try {
       const packument = await abbreviated(record.name);
       const versions = Object.keys(packument.versions);
       record.latest = { version: packument["dist-tags"]?.latest ?? null };
-      if (record.source) {
-        // Nothing to resolve: only the latest npm version is reported, for comparison.
-      } else if (locked?.version) {
-        record.resolvedVersion = locked.version;
-        record.resolvedFrom = lock.file;
-        if (!record.override && !satisfies(locked.version, record.declaredRange) &&
-          /^[~^<>=\w\s|*.-]+$/.test(record.declaredRange)) {
-          record.lockStale = true;
-        }
+      if (record.source || record.resolvedVersion) {
+        // Nothing to resolve: the lockfile already did, or npm only describes the upstream package.
       } else {
         record.resolvedVersion = maxSatisfying(versions, record.declaredRange);
         record.resolvedFrom = "range";
@@ -763,7 +787,7 @@ export async function inventory({ appRoot: appRootArg, target, from }) {
       lockfile: lock?.file ?? null,
       expo: expo && {
         mode: expo.mode,
-        installed: records.get("expo")?.resolvedVersion ?? null,
+        installed: named("expo").find((r) => r.ownerDir === appRoot)?.resolvedVersion ?? null,
         targetSdk: expo.targetSdk && {
           version: expo.targetSdk.version,
           reactNative: expo.targetSdk.reactNative,
@@ -784,7 +808,7 @@ export async function inventory({ appRoot: appRootArg, target, from }) {
     patches: findPatches(repoRoot).map((p) => ({
       ...p,
       inAppRoot: p.path.startsWith(relative(repoRoot, appRoot) ? relative(repoRoot, appRoot) + "/" : ""),
-      auditedHere: records.has(p.library),
+      auditedHere: named(p.library).length > 0,
     })),
     dependencies: [...records.values()].map(({ ownerDir, ...record }) => record),
     counts: [...records.values()].reduce((acc, r) => ({ ...acc, [r.class]: (acc[r.class] ?? 0) + 1 }), {}),
