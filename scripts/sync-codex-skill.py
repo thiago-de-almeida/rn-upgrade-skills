@@ -11,11 +11,12 @@ SOURCE_DIR = ROOT / "plugins/rn-upgrade/skills"
 DESTINATION_DIR = ROOT / "skills"
 CLAUDE_INPUTS = """Arguments: `$ARGUMENTS` — in order: TARGET_VERSION, APP_ROOT, FROM_VERSION.
 (Pasting this prompt into another tool? Replace the arguments line with the values below. You may
-also add REPORT_PATH, a file outside the repo to save the report to.)"""
+also add REPORT_PATH, a file outside the repo to save the report to, and HTML=no to skip the HTML
+page saved next to it.)"""
 CODEX_INPUTS = """Read TARGET_VERSION, APP_ROOT, and optional FROM_VERSION from the user's request, either as
 `KEY=VALUE` pairs (`{invocation} TARGET_VERSION=0.86.3 APP_ROOT=.`) or positionally in that
 order (`{invocation} 0.86.3 .`). The user may also provide REPORT_PATH, a file outside the
-app's repo to save the report to.
+app's repo to save the report to, and HTML=no to skip the HTML page saved next to it.
 Follow this workflow exactly, stay inside its scope, and back every claim in your report with
 evidence (file:line, commit SHA, command output)."""
 SKILL_DIR_NOTE = """

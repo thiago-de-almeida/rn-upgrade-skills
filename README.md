@@ -62,6 +62,21 @@ Each skill runs in a dedicated subagent on Sonnet (`rn-upgrade-applier` leaves a
 **uncommitted**; `rn-upgrade-auditor` only reads) and returns the report in your conversation. The main session may summarize it;
 ask Claude to print it in full or save it to a file.
 
+### HTML report
+
+Give the skill a file outside the repo to save the report to, and it also writes an HTML page next
+to it: a dashboard with counts, filters and expandable rows, then the full report. The page is one
+self-contained file that opens offline. A bundled script renders it, not the model, so it costs
+almost no tokens. Add `HTML=no` to skip it.
+
+```
+/rn-upgrade:audit-libraries 0.86.3 . REPORT_PATH=~/rn-reports/audit.md
+```
+
+To render a report you already have:
+`node plugins/rn-upgrade/skills/audit-libraries/scripts/render-html.mjs audit.md` (the script is
+the same in both skills).
+
 ## Install (Codex)
 
 Ask Codex to install the standalone skill from this repository. The installer puts it in

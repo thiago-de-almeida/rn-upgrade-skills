@@ -1,0 +1,99 @@
+// Run with: node --test tests/*.test.mjs
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "node:test";
+import { extractData, markdownToHtml, renderPage } from "../plugins/rn-upgrade/skills/audit-libraries/scripts/render-html.mjs";
+
+const SKILLS = "plugins/rn-upgrade/skills";
+const RENDERER = `${SKILLS}/audit-libraries/scripts/render-html.mjs`;
+const count = (text, needle) => text.split(needle).length - 1;
+
+test("both skills ship the same renderer", () => {
+  assert.equal(readFileSync(`${SKILLS}/apply-upgrade-diff/scripts/render-html.mjs`, "utf8"), readFileSync(RENDERER, "utf8"));
+});
+
+test("markdown: headings get unique ids, tables keep escaped pipes", () => {
+  const { html, headings } = markdownToHtml("# Title\n\n## 1. Summary\n\n## 1. Summary\n\n| a | b |\n|---|---|\n| x \\| y | `z` |\n");
+  assert.match(html, /<h2 id="1-summary">1\. Summary<\/h2>/);
+  assert.match(html, /<h2 id="1-summary-2">/);
+  assert.match(html, /<td>x \| y<\/td><td><code>z<\/code><\/td>/);
+  assert.deepEqual(headings.map((h) => h.id), ["title", "1-summary", "1-summary-2"]);
+});
+
+test("markdown: nested lists, code fences, quotes and inline marks", () => {
+  const { html } = markdownToHtml("> **About.** note\n\n- one\n  - two **bold**\n- three _it_\n\n```js\nconst a = '<b>';\n```\n");
+  assert.match(html, /<blockquote><p><strong>About\.<\/strong> note<\/p><\/blockquote>/);
+  assert.match(html, /<ul><li>one<ul><li>two <strong>bold<\/strong><\/li><\/ul><\/li><li>three <em>it<\/em><\/li><\/ul>/);
+  assert.match(html, /<pre><code class="language-js">const a = &#39;&lt;b&gt;&#39;;<\/code><\/pre>/);
+});
+
+test("markdown: escapes HTML and only links safe URLs", () => {
+  const { html } = markdownToHtml("<script>alert(1)</script> [x](javascript:alert(1)) [ok](https://a.dev/x?a=1&b=2) see https://b.dev/y. `**not bold**`");
+  assert.ok(!html.includes("<script>"));
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.ok(!html.includes('href="javascript'));
+  assert.match(html, /<a href="https:\/\/a\.dev\/x\?a=1&amp;b=2">ok<\/a>/);
+  assert.match(html, /<a href="https:\/\/b\.dev\/y">https:\/\/b\.dev\/y<\/a>\./);
+  assert.match(html, /<code>\*\*not bold\*\*<\/code>/);
+});
+
+test("extractData reads the last json block, and reports a broken one", () => {
+  assert.deepEqual(extractData("```json\n{\"a\":1}\n```\ntext\n```json\n{\"b\":2}\n```\n"), { data: { b: 2 }, error: null });
+  assert.deepEqual(extractData("no data"), { data: null, error: "no ```json block found" });
+  assert.equal(extractData("```json\n{oops}\n```").data, null);
+});
+
+test("audit page: dashboard from the data block, full report below", () => {
+  const md = readFileSync("examples/rocket-chat-0.81.5-to-0.86.3.md", "utf8");
+  const html = renderPage(md, { source: "rocket-chat.md" });
+  const { data } = extractData(md);
+  assert.equal(count(html, 'class="row"'), data.libraries.length);
+  assert.match(html, /data-tile="audited"[^>]*>[\s\S]*?>79</);
+  assert.match(html, /data-verdict="major bump"/);
+  assert.match(html, /id="full-report"/);
+  assert.match(html, /href="#react-native-skeleton-placeholder/);
+  assert.ok(!/<script>(?!\s*(const|"use strict"))/.test(html.replace(/<script type="application\/json"[\s\S]*?<\/script>/g, "")));
+  assert.ok(!html.includes("http://") || !/<link|src="http/.test(html), "no external resources");
+});
+
+test("diff page: results, hand-applied hunks and questions from the data block", () => {
+  const data = {
+    schemaVersion: 1, rn: { from: "0.77.3", to: "0.86.3" },
+    diffUrl: "https://raw.githubusercontent.com/react-native-community/rn-diff-purge/diffs/diffs/0.77.3..0.86.3.diff",
+    summary: { files: 3, byResult: { "applied clean": 1, "applied by hand": 1, "needs human": 1 } },
+    files: [
+      { file: ".gitignore", result: "applied clean", cause: "none", evidence: "adds `.kotlin/`" },
+      { file: "android/build.gradle", result: "applied by hand", cause: "Customized", evidence: "line 12" },
+      { file: "ios/Podfile", result: "needs human", cause: "Conflict <x>", evidence: "post_install hook" },
+    ],
+    handApplied: [{ file: "android/build.gradle", change: "kept the flavor block", why: "same intent" }],
+    openQuestions: ["Keep the custom Podfile hook?"],
+    nextSteps: ["pod install"],
+  };
+  const md = "# Diff report\n\n## 1. Version used\n\ntext\n\n## 6. Data\n\n```json\n" + JSON.stringify(data) + "\n```\n";
+  const html = renderPage(md, { source: "diff.md" });
+  assert.equal(count(html, 'class="row"'), 3);
+  assert.match(html, /data-result="needs human"/);
+  assert.match(html, /Conflict &lt;x&gt;/);
+  assert.match(html, /kept the flavor block/);
+  assert.match(html, /Keep the custom Podfile hook\?/);
+});
+
+test("a report without a data block still renders, with a notice", () => {
+  const html = renderPage("# Old report\n\nSome text.", { source: "old.md" });
+  assert.match(html, /no data block/i);
+  assert.match(html, /Some text\./);
+  assert.equal(count(html, 'class="row"'), 0);
+});
+
+test("CLI writes the page next to the report", () => {
+  const dir = mkdtempSync(join(tmpdir(), "render-html-"));
+  const report = join(dir, "report.md");
+  writeFileSync(report, "# R\n\ntext\n");
+  const out = execFileSync("node", [RENDERER, report], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  assert.equal(out, join(dir, "report.html"));
+  assert.ok(existsSync(out));
+});

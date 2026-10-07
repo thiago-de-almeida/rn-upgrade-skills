@@ -16,9 +16,11 @@ apply that diff to this project, and to explain every part of it that does not a
 Read TARGET_VERSION, APP_ROOT, and optional FROM_VERSION from the user's request, either as
 `KEY=VALUE` pairs (`$apply-upgrade-diff TARGET_VERSION=0.86.3 APP_ROOT=.`) or positionally in that
 order (`$apply-upgrade-diff 0.86.3 .`). The user may also provide REPORT_PATH, a file outside the
-app's repo to save the report to.
+app's repo to save the report to, and HTML=no to skip the HTML page saved next to it.
 Follow this workflow exactly, stay inside its scope, and back every claim in your report with
 evidence (file:line, commit SHA, command output).
+`<SKILL_DIR>` below is the folder that contains this SKILL.md, not the current directory. Resolve
+it to an absolute path before running anything from it.
 
 - TARGET_VERSION: `<e.g. 0.86.3>`
 - APP_ROOT: `<path to the folder with the app's package.json, android/ and ios/ — "." if it is the repo root>`
@@ -147,6 +149,25 @@ Write the report in Markdown with these sections:
 4. Open questions for a human, including lockstep packages that need a third-party upgrade,
    workspace version conflicts, and clean hunks that remove something the app relies on.
 5. Next steps that were out of scope (install, pods, library upgrades, build), as a short list.
+6. Data: a fenced `json` block with exactly this shape, for tools that read the report:
+```json
+{
+  "schemaVersion": 1,
+  "rn": { "from": "", "to": "" },
+  "diffUrl": "",
+  "summary": { "files": 0, "byResult": {} },
+  "files": [{ "file": "", "result": "", "cause": "", "evidence": "" }],
+  "handApplied": [{ "file": "", "change": "", "why": "" }],
+  "openQuestions": [""],
+  "nextSteps": [""]
+}
+```
+`result` uses the four results above. Values that come from the sections above must match them.
 
 Return the full report, all sections, as your final message. If REPORT_PATH was given and your
 environment allows writing it, also save the report there; otherwise state that it was not saved.
+
+If you saved the report and HTML is not `no`, run
+`node "<SKILL_DIR>/scripts/render-html.mjs" <REPORT_PATH>`: it writes a self-contained HTML
+page next to the report and prints its path. End your final message with `HTML report: <path>`. If
+the script fails, say so in one line. Never write the HTML yourself.
