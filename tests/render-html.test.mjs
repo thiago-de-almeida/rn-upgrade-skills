@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { extractData, markdownToHtml, renderPage } from "../plugins/rn-upgrade/skills/audit-libraries/scripts/render-html.mjs";
+import { extractData, inline, markdownToHtml, renderPage } from "../plugins/rn-upgrade/skills/audit-libraries/scripts/render-html.mjs";
 
 const SKILLS = "plugins/rn-upgrade/skills";
 const RENDERER = `${SKILLS}/audit-libraries/scripts/render-html.mjs`;
@@ -103,4 +103,60 @@ test("CLI writes the page next to the report", () => {
   const out = execFileSync("node", [RENDERER, report], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
   assert.equal(out, join(dir, "report.html"));
   assert.ok(existsSync(out));
+});
+
+const auditMd = (data) => "# A\n\n### lib-a — replace, required\n\n## 9. Data\n\n```json\n" + JSON.stringify(data) + "\n```\n";
+
+test("counts come from the data, never raw summary text", () => {
+  const evil = "<img src=x onerror=alert(1)>";
+  const audit = renderPage(auditMd({ rn: { to: "0.86.3" }, summary: { required: evil, audited: evil, recommended: evil, needsHuman: evil },
+    libraries: [{ name: "lib-a", verdict: "replace", need: "required" }] }));
+  const diff = renderPage("# D\n\n```json\n" + JSON.stringify({ summary: { files: evil, byResult: { "applied clean": evil } },
+    files: [{ file: "a", result: "applied clean" }] }) + "\n```\n");
+  for (const html of [audit, diff]) assert.ok(!html.includes("<img src=x"), "summary text reached the page");
+  assert.match(audit, /<b>1<\/b> of 1 library must change/);
+});
+
+test("a data block with the wrong shape still renders", () => {
+  for (const data of [
+    { libraries: [null, { name: "x", targets: "android", breakingChanges: "x", dependsOn: "y", native: "z" }] },
+    { libraries: {} }, { files: {} }, { files: [null, { file: 1, result: 2 }], handApplied: "x", openQuestions: "y" },
+  ]) {
+    const html = renderPage("# R\n\ntext\n\n```json\n" + JSON.stringify(data) + "\n```\n");
+    assert.match(html, /id="full-report"/);
+  }
+});
+
+test("inline: code inside link labels, bold URLs and stray placeholder bytes", () => {
+  assert.equal(inline("[`rnv`](https://x.dev)"), '<a href="https://x.dev"><code>rnv</code></a>');
+  assert.equal(inline("**https://a.com/x**"), '<strong><a href="https://a.com/x">https://a.com/x</a></strong>');
+  assert.ok(!inline("`a` \u00000\u0000").includes("<code>a</code> <code>"));
+});
+
+test("lists keep their numbers across blank lines", () => {
+  const { html } = markdownToHtml("3. three\n\n4. four\n");
+  assert.match(html, /<ol start="3"><li>three<\/li><li>four<\/li><\/ol>/);
+});
+
+test("report headings never take the page's own ids, and evidence links match whole names", () => {
+  const md = "# R\n\n## Tip\n\n### native-stack — minor bump, recommended\n\n### native — ok\n\n```json\n" +
+    JSON.stringify({ libraries: [{ name: "native", verdict: "major bump", need: "required" }] }) + "\n```\n";
+  const html = renderPage(md);
+  assert.equal(count(html, 'id="tip"'), 1);
+  assert.match(html, /href="#native-ok"/);
+  assert.ok(!html.includes('href="#native-stack'));
+});
+
+test("CLI: works through a symlink, rejects a bad --out", async () => {
+  const { symlinkSync } = await import("node:fs");
+  const dir = mkdtempSync(join(tmpdir(), "render-html-"));
+  const report = join(dir, "r.md");
+  writeFileSync(report, "# R\n");
+  const link = join(dir, "link.mjs");
+  symlinkSync(join(process.cwd(), RENDERER), link);
+  const out = execFileSync("node", [link, report], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  assert.equal(out, join(dir, "r.html"));
+  for (const args of [[report, "--out"], [report, "--out", report], [report, "--out", join(dir, "missing", "x.html")]]) {
+    assert.throws(() => execFileSync("node", [RENDERER, ...args], { stdio: "pipe" }), (e) => e.status === 1 && /render-html: /.test(String(e.stderr)));
+  }
 });

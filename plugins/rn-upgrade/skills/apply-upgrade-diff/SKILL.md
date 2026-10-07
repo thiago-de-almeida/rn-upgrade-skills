@@ -165,6 +165,6 @@ Return the full report, all sections, as your final message. If REPORT_PATH was 
 environment allows writing it, also save the report there; otherwise state that it was not saved.
 
 If you saved the report and HTML is not `no`, run
-`node "${CLAUDE_SKILL_DIR}/scripts/render-html.mjs" <REPORT_PATH>`: it writes a self-contained HTML
+`node "${CLAUDE_SKILL_DIR}/scripts/render-html.mjs" "<REPORT_PATH>"`: it writes a self-contained HTML
 page next to the report and prints its path. End your final message with `HTML report: <path>`. If
 the script fails, say so in one line. Never write the HTML yourself.

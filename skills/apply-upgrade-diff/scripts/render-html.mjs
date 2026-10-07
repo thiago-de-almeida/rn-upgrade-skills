@@ -7,9 +7,9 @@
 //
 // Prints the path of the page it wrote. A missing or broken data block is a warning, not an error.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { DISPLAY_600, MONO_400, MONO_600 } from "./render-html-fonts.mjs";
 
 // ---------------------------------------------------------------------------------------------
@@ -29,23 +29,32 @@ export function slugify(text) {
 }
 
 // Inline marks: code spans, links, bare URLs, bold, italic. Everything else is escaped.
+// Finished HTML is parked in a stash behind \u0000N\u0000 tokens so later passes cannot touch it.
 export function inline(text) {
   const stash = [];
+  let html = inlineInto(String(text ?? "").replace(/\u0000/g, ""), stash), previous;
+  do {
+    previous = html;
+    html = html.replace(/\u0000(\d+)\u0000/g, (_, i) => stash[+i]);
+  } while (html !== previous);
+  return html;
+}
+
+function inlineInto(text, stash) {
   const keep = (html) => `\u0000${stash.push(html) - 1}\u0000`;
-  let out = String(text ?? "")
+  const out = text
     .replace(/`([^`]+)`/g, (_, code) => keep(`<code>${esc(code)}</code>`))
     .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (all, label, url) =>
-      safeUrl(url) ? keep(`<a href="${esc(url)}">${inline(label)}</a>`) : keep(esc(label)));
-  out = esc(out)
+      keep(safeUrl(url) ? `<a href="${esc(url)}">${inlineInto(label, stash)}</a>` : inlineInto(label, stash)));
+  return esc(out)
     .replace(/https?:\/\/[^\s<>"'\u0000]+/g, (url) => {
-      const trail = /[.,;:!?)\]]+$/.exec(url)?.[0] ?? "";
+      const trail = /[.,;:!?)\]*_]+$/.exec(url)?.[0] ?? "";
       const clean = url.slice(0, url.length - trail.length);
-      return `<a href="${clean}">${clean}</a>${trail}`;
+      return keep(`<a href="${clean}">${clean}</a>`) + trail;
     })
     .replace(/\*\*(?=\S)(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[\s(])\*(?=\S)([^*]+?)\*(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>")
     .replace(/(^|[\s(])_(?=\S)([^_]+?)_(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>");
-  return out.replace(/\u0000(\d+)\u0000/g, (_, i) => stash[+i]);
 }
 
 const splitRow = (line) => line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "")
@@ -53,11 +62,11 @@ const splitRow = (line) => line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, 
 const isTableSeparator = (line) => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/.test(line);
 const LIST = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
 
-// Returns { html, headings: [{ level, text, id }] }.
-export function markdownToHtml(md) {
+// Returns { html, headings: [{ level, text, id }] }. Heading ids skip the ones in `reserved`.
+export function markdownToHtml(md, { reserved = [] } = {}) {
   const lines = String(md).replace(/\r\n?/g, "\n").split("\n");
   const headings = [];
-  const used = new Map();
+  const used = new Map(reserved.map((id) => [id, 1]));
   const uniqueId = (text) => {
     const base = slugify(text);
     const n = (used.get(base) ?? 0) + 1;
@@ -115,9 +124,17 @@ export function markdownToHtml(md) {
       const items = [];
       for (; i < lines.length; i++) {
         const m = LIST.exec(lines[i]);
-        if (m) items.push({ indent: m[1].length, ordered: /\d/.test(m[2]), text: m[3] });
-        else if (lines[i].trim() && /^\s+/.test(lines[i]) && items.length) items.at(-1).text += " " + lines[i].trim();
-        else break;
+        if (m) {
+          items.push({ indent: m[1].length, ordered: /\d/.test(m[2]), start: parseInt(m[2], 10), text: m[3] });
+        } else if (!lines[i].trim()) {
+          // A blank line keeps the list going when the next item follows it.
+          let next = i + 1;
+          while (next < lines.length && !lines[next].trim()) next++;
+          if (next < lines.length && LIST.test(lines[next])) i = next - 1;
+          else break;
+        } else if (/^\s+/.test(lines[i]) && items.length && !/^\s*```/.test(lines[i])) {
+          items.at(-1).text += " " + lines[i].trim();
+        } else break;
       }
       html.push(renderList(items));
       continue;
@@ -142,7 +159,7 @@ function renderList(items) {
     if (!top || item.indent > top.indent) {
       const tag = item.ordered ? "ol" : "ul";
       stack.push({ indent: item.indent, tag });
-      html += `<${tag}><li>`;
+      html += `<${tag}${item.ordered && item.start > 1 ? ` start="${item.start}"` : ""}><li>`;
     } else {
       html += "</li><li>";
     }
@@ -168,18 +185,24 @@ export function extractData(md) {
 // ---------------------------------------------------------------------------------------------
 // Page
 
+// Ids the page itself uses; report headings never take them.
+const RESERVED_IDS = ["tip", "q", "shown", "overview", "libraries", "files", "blockers", "constraints", "questions", "hand", "next", "full-report"];
 const VERDICTS = ["ok as is", "minor bump", "major bump", "replace", "patch/fork", "needs human"];
 const RESULTS = ["applied clean", "applied by hand", "skipped", "needs human"];
 const AUDIT_GROUPS = [["must", "Must change"], ["should", "Should change"], ["human", "Needs a human"], ["ok", "OK as is"]];
 const DIFF_GROUPS = [["clean", "Applied clean", "applied clean"], ["hand", "Applied by hand", "applied by hand"],
   ["skip", "Skipped", "skipped"], ["human", "Needs a human", "needs human"]];
 
+// The data block is model-written: take only arrays and objects of the expected shape, and count
+// from the rows themselves rather than trusting the summary.
+const arr = (x) => (Array.isArray(x) ? x : []);
+const objs = (x) => arr(x).filter((v) => v && typeof v === "object" && !Array.isArray(v));
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 // Paths break after a slash, not in the middle of a name.
 const path = (text) => esc(text).replace(/\//g, "/<wbr>");
 const tag = (text) => `<span class="tag">${esc(text)}</span>`;
 const state = (key, label) => `<span class="state s-${key}"><i aria-hidden="true"></i>${esc(label)}</span>`;
-const list = (items) => items?.length ? `<ul>${items.map((x) => `<li>${inline(x)}</li>`).join("")}</ul>` : "";
+const list = (items) => arr(items).length ? `<ul>${items.map((x) => `<li>${inline(x)}</li>`).join("")}</ul>` : "";
 const auditGroup = (l) => l.need === "required" ? "must" : l.need === "recommended" ? "should" : l.verdict === "needs human" ? "human" : "ok";
 
 // The two versions, with a tick for every minor crossed between them.
@@ -216,22 +239,24 @@ const section = (id, title, body, note = "") =>
   `<section class="block" id="${id}"><header class="block-head"><h2>${esc(title)}</h2>${note ? `<p>${note}</p>` : ""}</header>${body}</section>`;
 
 function auditView(data, headings) {
-  const libs = data.libraries ?? [];
-  const s = data.summary ?? {};
+  const libs = objs(data.libraries).map((l) => ({ ...l, name: String(l.name ?? ""), verdict: String(l.verdict ?? "") }));
   const to = data.rn?.to ?? "the target";
-  const required = s.required ?? libs.filter((l) => l.need === "required").length;
-  const recommended = s.recommended ?? libs.filter((l) => l.need === "recommended").length;
-  const human = s.needsHuman ?? libs.filter((l) => l.verdict === "needs human").length;
+  const required = libs.filter((l) => l.need === "required").length;
+  const recommended = libs.filter((l) => l.need === "recommended").length;
+  const human = libs.filter((l) => l.verdict === "needs human").length;
   const blockers = libs.filter((l) => l.blocksBuild === true);
-  const globals = data.globalConstraints ?? [];
+  const globals = objs(data.globalConstraints);
   const globalBlockers = globals.filter((g) => g.blocksBuild === true);
-  const detailsId = (name) => headings.find((h) => h.level === 3 && h.text.replace(/`/g, "").startsWith(name))?.id;
+  const detailsId = (name) => headings.find((h) => {
+    const text = h.text.replace(/`/g, "");
+    return h.level === 3 && (text === name || text.startsWith(name + " "));
+  })?.id;
   const rank = { must: 0, should: 1, human: 2, ok: 3 };
   const sorted = libs.map((l, index) => ({ l, index, group: auditGroup(l) }))
     .sort((a, b) => rank[a.group] - rank[b.group] || a.index - b.index)
     .map((x, n) => ({ ...x, id: `r${n}` }));
 
-  const thesis = `<p class="thesis"><b>${required}</b> of ${plural(s.audited ?? libs.length, "library", "libraries")} must change for ${esc(to)}.` +
+  const thesis = `<p class="thesis"><b>${required}</b> of ${plural(libs.length, "library", "libraries")} must change for ${esc(to)}.` +
     (recommended ? ` <b>${recommended}</b> more should.` : "") +
     (blockers.length + globalBlockers.length ? ` <b>${blockers.length + globalBlockers.length}</b> ${blockers.length + globalBlockers.length === 1 ? "thing blocks" : "things block"} the build as it stands.` : "") +
     (human ? ` <b>${human}</b> ${human === 1 ? "needs" : "need"} a human decision.` : "") + `</p>`;
@@ -241,18 +266,18 @@ function auditView(data, headings) {
 
   const rows = sorted.map(({ l, id, group }) => {
     const anchor = detailsId(l.name);
-    const search = [l.name, l.verdict, l.need, l.work, l.recommended, ...(l.targets ?? [])].join(" ").toLowerCase();
-    const breaking = (l.breakingChanges ?? []).map((b) =>
+    const search = [l.name, l.verdict, l.need, l.work, l.recommended, ...arr(l.targets)].join(" ").toLowerCase();
+    const breaking = objs(l.breakingChanges).map((b) =>
       `<li><span class="affects a-${esc(b.affects ?? "unknown")}">affects: ${esc(b.affects ?? "unknown")}</span> ${inline(b.summary)}` +
-      `${b.files?.length ? ` <span class="muted">— ${b.files.map(inline).join(", ")}</span>` : ""}</li>`).join("");
-    const native = Object.entries(l.native ?? {}).filter(([, v]) => v != null)
+      `${arr(b.files).length ? ` <span class="muted">— ${arr(b.files).map(inline).join(", ")}</span>` : ""}</li>`).join("");
+    const native = Object.entries(l.native && typeof l.native === "object" ? l.native : {}).filter(([, v]) => v != null)
       .map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${inline(String(v))}</dd></div>`).join("");
     const detail = [
       l.work ? `<p><span class="k">Work</span> ${inline(l.work)}</p>` : "",
-      l.dependsOn?.length ? `<p><span class="k">Moves with</span> ${l.dependsOn.map(inline).join(", ")}</p>` : "",
+      arr(l.dependsOn).length ? `<p><span class="k">Moves with</span> ${arr(l.dependsOn).map(inline).join(", ")}</p>` : "",
       breaking ? `<p class="k">Breaking changes</p><ul>${breaking}</ul>` : "",
       native ? `<p class="k">Native values</p><dl class="native">${native}</dl>` : "",
-      l.openQuestions?.length ? `<p><span class="k">Open questions</span> ${l.openQuestions.map(inline).join(", ")}</p>` : "",
+      arr(l.openQuestions).length ? `<p><span class="k">Open questions</span> ${arr(l.openQuestions).map(inline).join(", ")}</p>` : "",
       anchor ? `<p><a href="#${anchor}">Read the evidence in the full report</a></p>` : "",
     ].join("");
     const blocks = l.blocksBuild === true ? state("must", "Blocks") : l.blocksBuild === "unknown" ? `<span class="muted">unknown</span>` : `<span class="muted">—</span>`;
@@ -261,15 +286,15 @@ function auditView(data, headings) {
       `<td class="name">${esc(l.name)}</td>` +
       `<td class="ver"><span class="from">${esc(l.installed)}</span><span class="arrow" aria-hidden="true">→</span><span class="to">${inline(l.recommended)}</span></td>` +
       `<td>${tag(l.verdict)}</td><td>${state(group, AUDIT_GROUPS.find(([k]) => k === group)[1])}</td><td>${blocks}</td>` +
-      `<td class="muted">${esc((l.targets ?? []).join(", ")) || "—"}</td><td class="num" title="Highest evidence rung reached">${esc(l.confidence ?? "")}</td></tr>` +
+      `<td class="muted">${esc(arr(l.targets).join(", ")) || "—"}</td><td class="num" title="Highest evidence rung reached">${esc(l.confidence ?? "")}</td></tr>` +
       `<tr class="detail" id="${id}-d" hidden><td></td><td colspan="7"><div class="detail-body">${detail || `<p class="muted">No details in the data block.</p>`}</div></td></tr>`;
   }).join("");
 
   const blockerList = [
-    ...globalBlockers.map((g) => `<li><span class="b-name">${esc(g.id)}</span><span class="b-what">${inline(g.description)}</span><span class="b-tags">${(g.targets ?? []).map(tag).join("")}</span></li>`),
+    ...globalBlockers.map((g) => `<li><span class="b-name">${esc(g.id)}</span><span class="b-what">${inline(g.description)}</span><span class="b-tags">${arr(g.targets).map(tag).join("")}</span></li>`),
     ...blockers.map((l) => {
       const what = /^(replace|remove)\b/i.test(l.recommended ?? "") ? inline(l.recommended) : `${esc(l.verdict)} to ${inline(l.recommended)}`;
-      return `<li><span class="b-name">${esc(l.name)}</span><span class="b-what">${what}</span><span class="b-tags">${(l.targets ?? []).map(tag).join("")}</span></li>`;
+      return `<li><span class="b-name">${esc(l.name)}</span><span class="b-what">${what}</span><span class="b-tags">${arr(l.targets).map(tag).join("")}</span></li>`;
     }),
   ].join("");
   const constraintList = globals.filter((g) => g.blocksBuild !== true)
@@ -291,9 +316,9 @@ function auditView(data, headings) {
 }
 
 function diffView(data) {
-  const files = data.files ?? [];
-  const by = data.summary?.byResult ?? files.reduce((acc, f) => ({ ...acc, [f.result]: (acc[f.result] ?? 0) + 1 }), {});
-  const total = data.summary?.files ?? files.length;
+  const files = objs(data.files).map((f) => ({ ...f, file: String(f.file ?? ""), result: String(f.result ?? "") }));
+  const by = files.reduce((acc, f) => ({ ...acc, [f.result]: (acc[f.result] ?? 0) + 1 }), {});
+  const total = files.length;
   const keyOf = (result) => DIFF_GROUPS.find(([, , r]) => r === result)?.[0] ?? "skip";
   const rows = files.map((f, n) => ({ f, id: `r${n}`, group: keyOf(f.result) }));
   const n = (r) => by[r] ?? 0;
@@ -311,29 +336,36 @@ function diffView(data) {
   const table = rows.map(({ f, id, group }) => `<tr class="row" id="${id}" data-group="${group}" data-result="${esc(f.result)}" ` +
     `data-search="${esc([f.file, f.result, f.cause, f.evidence].join(" ").toLowerCase())}">` +
     `<td class="name file">${path(f.file)}</td><td>${state(group, label[group])}</td><td>${inline(f.cause)}</td><td class="evidence">${inline(f.evidence)}</td></tr>`).join("");
-  const hand = (data.handApplied ?? []).map((h) =>
+  const hand = objs(data.handApplied).map((h) =>
     `<li><p class="file">${path(h.file)}</p><p>${inline(h.change)}</p>${h.why ? `<p class="why"><span class="k">Why it matches the template</span> ${inline(h.why)}</p>` : ""}</li>`).join("");
   return {
     hero: thesis + matrix(groups, "Files by result"),
     body: [
-      data.openQuestions?.length ? section("questions", "Decisions for a human", `<ol class="questions">${data.openQuestions.map((q) => `<li>${inline(q)}</li>`).join("")}</ol>`) : "",
+      arr(data.openQuestions).length ? section("questions", "Decisions for a human", `<ol class="questions">${arr(data.openQuestions).map((q) => `<li>${inline(q)}</li>`).join("")}</ol>`) : "",
       hand ? section("hand", "Applied by hand", `<ul class="hand">${hand}</ul>`, "What changed in each file, and why it keeps the template's intent.") : "",
       section("files", "Files", filters([["group", "Result", DIFF_GROUPS.filter(([k]) => groups.find((g) => g.key === k).items.length).map(([k, l]) => [k, l])]], "Filter by file, cause or evidence") +
         `<div class="table-wrap"><table class="data"><thead><tr><th data-sort="name">File</th><th data-sort="group">Result</th><th>Cause</th><th>Evidence</th></tr></thead>` +
         `<tbody>${table}</tbody></table></div>`),
-      data.nextSteps?.length ? section("next", "Next steps", list(data.nextSteps), "Out of this skill's scope: install, pods, library upgrades and the build.") : "",
+      arr(data.nextSteps).length ? section("next", "Next steps", list(arr(data.nextSteps)), "Out of this skill's scope: install, pods, library upgrades and the build.") : "",
     ].join("\n"),
   };
 }
 
 export function renderPage(md, { source = "report.md" } = {}) {
-  const { html: reportHtml, headings } = markdownToHtml(md);
-  const { data, error } = extractData(md);
-  const kind = data?.libraries ? "audit" : data?.files ? "diff" : null;
+  const { html: reportHtml, headings } = markdownToHtml(md, { reserved: RESERVED_IDS });
+  const { data: raw, error: dataError } = extractData(md);
+  const data = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : null;
+  if (data && !(data.rn && typeof data.rn === "object")) data.rn = null;
+  const kind = Array.isArray(data?.libraries) ? "audit" : Array.isArray(data?.files) ? "diff" : null;
   const title = headings.find((h) => h.level === 1)?.text.replace(/`/g, "") ?? source;
-  const view = kind === "audit" ? auditView(data, headings) : kind === "diff" ? diffView(data) : null;
+  let view = null, error = dataError ?? (raw && !kind ? "the json block has neither libraries nor files" : null);
+  try {
+    view = kind === "audit" ? auditView(data, headings) : kind === "diff" ? diffView(data) : null;
+  } catch (e) {
+    error = `the summary could not be built (${e.message})`;
+  }
   const kindLabel = kind === "audit" ? "Library audit" : kind === "diff" ? "Upgrade Helper diff" : "Report";
-  const diffLink = data?.diffUrl && safeUrl(data.diffUrl) ? ` · <a href="${esc(data.diffUrl)}">the diff</a>` : "";
+  const diffLink = typeof data?.diffUrl === "string" && safeUrl(data.diffUrl) ? ` · <a href="${esc(data.diffUrl)}">the diff</a>` : "";
   const notice = view ? "" : `<p class="notice" role="note">No data block in this report${error && !error.startsWith("no ") ? ` (${esc(error)})` : ""}, so there is no summary: the full report is below.</p>`;
   const toc = headings.filter((h) => h.level === 2).map((h) => `<li><a href="#${h.id}">${inline(h.text)}</a></li>`).join("");
 
@@ -601,24 +633,38 @@ const JS = `"use strict";
 // CLI
 
 function main(argv) {
-  const input = argv.find((a, i) => !a.startsWith("--") && argv[i - 1] !== "--out");
-  const outIndex = argv.indexOf("--out");
-  if (!input) {
-    process.stderr.write("usage: node render-html.mjs <report.md> [--out <page.html>]\n");
+  const fail = (message) => {
+    process.stderr.write(`render-html: ${message}\n`);
     process.exit(1);
-  }
+  };
+  const outIndex = argv.indexOf("--out");
+  if (outIndex >= 0 && (!argv[outIndex + 1] || argv[outIndex + 1].startsWith("--"))) fail("--out needs a file path");
+  const input = argv.find((a, i) => !a.startsWith("--") && (outIndex < 0 || i !== outIndex + 1));
+  if (!input) fail("usage: node render-html.mjs <report.md> [--out <page.html>]");
   let md;
   try {
     md = readFileSync(input, "utf8");
   } catch (e) {
-    process.stderr.write(`render-html: cannot read ${input} (${e.message})\n`);
-    process.exit(1);
+    fail(`cannot read ${input} (${e.message})`);
   }
   const out = resolve(outIndex >= 0 ? argv[outIndex + 1] : input.replace(/\.(md|markdown)$/i, "") + ".html");
+  if (out === resolve(input)) fail("--out must not be the report itself");
   const { error } = extractData(md);
   if (error) process.stderr.write(`render-html: warning: ${error}; the page has the full report only\n`);
-  writeFileSync(out, renderPage(md, { source: input.split(/[\\/]/).pop() }));
+  try {
+    writeFileSync(out, renderPage(md, { source: input.split(/[\\/]/).pop() }));
+  } catch (e) {
+    fail(`cannot write ${out} (${e.message})`);
+  }
   process.stdout.write(out + "\n");
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main(process.argv.slice(2));
+// Run as a script, also when reached through a symlink (a linked skills folder, for example).
+const invoked = process.argv[1] && (() => {
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+})();
+if (invoked) main(process.argv.slice(2));
