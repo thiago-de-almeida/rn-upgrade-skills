@@ -266,10 +266,10 @@ function auditView(data, headings) {
   }).join("");
 
   const blockerList = [
-    ...globalBlockers.map((g) => `<li><span class="b-name">${esc(g.id)}</span><span class="b-what">${inline(g.description)}</span>${(g.targets ?? []).map(tag).join("")}</li>`),
+    ...globalBlockers.map((g) => `<li><span class="b-name">${esc(g.id)}</span><span class="b-what">${inline(g.description)}</span><span class="b-tags">${(g.targets ?? []).map(tag).join("")}</span></li>`),
     ...blockers.map((l) => {
       const what = /^(replace|remove)\b/i.test(l.recommended ?? "") ? inline(l.recommended) : `${esc(l.verdict)} to ${inline(l.recommended)}`;
-      return `<li><span class="b-name">${esc(l.name)}</span><span class="b-what">${what}</span>${(l.targets ?? []).map(tag).join("")}</li>`;
+      return `<li><span class="b-name">${esc(l.name)}</span><span class="b-what">${what}</span><span class="b-tags">${(l.targets ?? []).map(tag).join("")}</span></li>`;
     }),
   ].join("");
   const constraintList = globals.filter((g) => g.blocksBuild !== true)
@@ -442,8 +442,7 @@ main{padding:8px 16px 0}
 .blockers li::before{content:"";width:10px;height:10px;border-radius:2px;background:var(--must);transform:translateY(1px)}
 .b-name{font:600 14px/1.4 var(--mono);overflow-wrap:anywhere}
 .b-what{color:var(--ink-2);font-size:14px}
-.blockers .tag{justify-self:end}
-.blockers li .tag+.tag{grid-column:auto}
+.b-tags{display:flex;gap:4px;justify-content:flex-end}
 .questions li{position:relative;padding:12px 0 12px 40px;border-bottom:1px solid var(--rule-2);counter-increment:n}
 .questions li::before{content:counter(n);position:absolute;left:0;top:10px;width:26px;height:26px;display:grid;place-items:center;border-radius:50%;background:var(--human);color:#fff;font:600 13px/1 var(--mono)}
 .hand{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
@@ -521,7 +520,7 @@ footer{margin:48px 0 0;padding:20px 0 48px;border-top:1px solid var(--rule);font
 .tip{position:fixed;z-index:10;pointer-events:none;max-width:320px;padding:6px 9px;border-radius:4px;background:var(--ink);color:var(--surface);font:400 12px/1.4 var(--mono)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (max-width:720px){.hero{padding:28px 0 26px}.v{font-size:clamp(34px,11vw,56px)}.stop span{display:none}
-.blockers li,.constraints li{grid-template-columns:1fr}.blockers li{grid-template-columns:16px 1fr}.blockers li>*:not(.b-name){grid-column:2}.blockers .tag{justify-self:start}
+.blockers li,.constraints li{grid-template-columns:1fr}.blockers li{grid-template-columns:16px 1fr}.blockers li>*:not(.b-name){grid-column:2}.b-tags{justify-content:flex-start}
 .shown{margin-left:0;width:100%}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 @media (forced-colors:active){.cell,.group-head i,.state i,.blockers li::before{forced-color-adjust:none;background:CanvasText}}
