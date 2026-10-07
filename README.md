@@ -10,7 +10,7 @@ Available as a Claude Code plugin and a standalone Codex skill.
 | Skill | Status | What you get |
 |---|---|---|
 | [`apply-upgrade-diff`](plugins/rn-upgrade/skills/apply-upgrade-diff/SKILL.md) | ✅ available | The Upgrade Helper diff applied to your project, plus a report that explains every hunk that did not apply cleanly (with file:line and commit evidence). [Real example](examples/react-native-video-0.77.3-to-0.86.3.md). |
-| [`audit-libraries`](plugins/rn-upgrade/skills/audit-libraries/SKILL.md) | ✅ available | Which third-party libraries must be upgraded, replaced or patched for the target RN version, which of their breaking changes affect your code, and a JSON block for the timeline. Report only: it changes nothing. |
+| [`audit-libraries`](plugins/rn-upgrade/skills/audit-libraries/SKILL.md) | ✅ available | Which third-party libraries must be upgraded, replaced or patched for the target RN version, which of their breaking changes affect your code, and a JSON block for the timeline. Report only: it changes nothing. [Real example](examples/rocket-chat-0.81.5-to-0.86.3.md). |
 | `check-android-target` | 🗓 planned | Whether the Android target/compile SDK must move, and what that implies. |
 | `check-ios-target` | 🗓 planned | Whether the iOS deployment target must move, and what that implies. |
 | `estimate-timeline` | 🗓 planned | A timeline built from the reports above. |
