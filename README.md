@@ -59,18 +59,19 @@ Both skills take the same arguments: `<target-version> <app-root> [from-version]
 - `from-version` is detected from your lockfile when omitted.
 
 Each skill runs in a dedicated subagent on Sonnet (`rn-upgrade-applier` leaves all changes
-**uncommitted**; `rn-upgrade-auditor` only reads) and returns the report in your conversation. The main session may summarize it;
-ask Claude to print it in full or save it to a file.
+**uncommitted**; `rn-upgrade-auditor` only reads). It saves the full report outside your repo, in
+`~/rn-upgrade-reports/<repo>/`, and returns a short summary with the report's path.
 
 ### HTML report
 
-Give the skill a file outside the repo to save the report to, and it also writes an HTML page next
-to it: a dashboard with counts, filters and expandable rows, then the full report. The page is one
-self-contained file that opens offline. A bundled script renders it, not the model, so it costs
-almost no tokens. Add `HTML=no` to skip it.
+Next to every report, the skill also writes an HTML page: the versions, a one-line verdict, a
+matrix of every library or file, a table with filters and expandable rows, then the full report.
+The page is one self-contained file that opens offline. A bundled script renders it, not the
+model, so it costs almost no tokens. Add `HTML=no` to skip it, or `REPORT_PATH=<file>` to save the
+report somewhere else:
 
 ```
-/rn-upgrade:audit-libraries 0.86.3 . REPORT_PATH=~/rn-reports/audit.md
+/rn-upgrade:audit-libraries 0.86.3 . REPORT_PATH=~/Desktop/audit.md
 ```
 
 To render a report you already have:
@@ -97,7 +98,7 @@ cp -R /path/to/rn-upgrade-skills/skills/apply-upgrade-diff .agents/skills/
 cp -R /path/to/rn-upgrade-skills/skills/audit-libraries .agents/skills/
 ```
 
-Copy the whole folder: `audit-libraries` ships a `scripts/` folder next to its `SKILL.md`.
+Copy the whole folder: both skills ship a `scripts/` folder next to their `SKILL.md`.
 
 For use across projects, copy it to `~/.agents/skills/` instead. Install it in only one
 scope (installer, repo or user folder) to avoid duplicate entries. Codex detects new skills
@@ -122,11 +123,12 @@ For a library example or a known starting version:
 $apply-upgrade-diff TARGET_VERSION=0.86.3 APP_ROOT=example FROM_VERSION=0.77.3
 ```
 
-`FROM_VERSION` is optional and detected from your lockfile when omitted. You may also
-provide `REPORT_PATH` outside the app's repository to save the full report.
+`FROM_VERSION` is optional and detected from your lockfile when omitted. The report and its
+HTML page are saved in `~/rn-upgrade-reports/<repo>/`; `REPORT_PATH` and `HTML=no` work as in
+Claude Code.
 
 Codex runs the workflow in the current session, leaves changes **uncommitted**, and returns
-the full report. The same prerequisites and upgrade scope apply to both hosts. Use a high
+a summary with the report's path. The same prerequisites and upgrade scope apply to both hosts. Use a high
 reasoning effort: the skill investigates every failed hunk in the code and git history.
 
 `$audit-libraries` takes the same inputs. It needs network access: approve it when Codex asks,
