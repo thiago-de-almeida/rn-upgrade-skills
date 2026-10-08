@@ -359,15 +359,33 @@ function diffView(data) {
 const TARGET_GROUPS = [["must", "Affects the app", "yes"], ["human", "Unknown", "unknown"], ["ok", "Does not affect", "no"]];
 const PLATFORM = { android: "Android", ios: "iOS" };
 const platformName = (p) => PLATFORM[String(p ?? "").toLowerCase()] ?? String(p ?? "Platform");
-const moves = (f) => f.required !== "" && f.current !== f.required;
+// Dotted versions compare numerically ("15.1" = "15.1.0" < "16.4"); anything else only by text.
+function compareVersions(a, b) {
+  if (!/^\d+(\.\d+)*$/.test(a) || !/^\d+(\.\d+)*$/.test(b)) return a === b ? 0 : NaN;
+  const x = a.split(".").map(Number), y = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
+  }
+  return 0;
+}
+// A value moves only when the required one is known and higher (or not comparable and different).
+const moves = (f) => {
+  if (!f.required) return false;
+  const c = compareVersions(f.required, f.current);
+  return Number.isNaN(c) ? f.current !== f.required : c > 0;
+};
 
 function targetsView(data) {
-  const platforms = objs(data.platforms).map((p) => ({
-    name: platformName(p.platform),
-    fields: objs(p.fields).map((f) => ({ ...f, name: String(f.name ?? ""), current: String(f.current ?? "").trim(), required: String(f.required ?? "").trim() })),
-    store: objs(p.store),
-    changes: objs(p.changes).map((c) => ({ ...c, affects: ["yes", "no"].includes(c.affects) ? c.affects : "unknown" })),
-  }));
+  // One entry per platform, even if the data lists "android" twice.
+  const byName = new Map();
+  for (const p of objs(data.platforms)) {
+    const name = platformName(p.platform);
+    const entry = byName.get(name) ?? byName.set(name, { name, fields: [], store: [], changes: [] }).get(name);
+    entry.fields.push(...objs(p.fields).map((f) => ({ ...f, name: String(f.name ?? ""), current: String(f.current ?? "").trim(), required: String(f.required ?? "").trim() })));
+    entry.store.push(...objs(p.store));
+    entry.changes.push(...objs(p.changes).map((c) => ({ ...c, affects: ["yes", "no"].includes(c.affects) ? c.affects : "unknown" })));
+  }
+  const platforms = [...byName.values()];
   const changes = platforms.flatMap((p) => p.changes.map((c) => ({ ...c, platform: p.name })));
   const keyOf = (affects) => TARGET_GROUPS.find(([, , a]) => a === affects)[0];
   const rows = changes.map((c, n) => ({ c, id: `r${n}`, group: keyOf(c.affects) }));
@@ -387,7 +405,7 @@ function targetsView(data) {
   const targetTables = platforms.map((p) => {
     const body = p.fields.map((f) => `<tr><td class="name">${esc(f.name)}</td>` +
       `<td class="ver"><span class="from">${esc(f.current || "?")}</span><span class="arrow" aria-hidden="true">→</span><span class="to">${esc(f.required || "?")}</span></td>` +
-      `<td>${moves(f) ? state("should", "Moves") : `<span class="muted">stays</span>`}</td>` +
+      `<td>${!f.required ? `<span class="muted">unknown</span>` : moves(f) ? state("should", "Moves") : `<span class="muted">stays</span>`}</td>` +
       `<td>${arr(f.requiredBy).map(inline).join("<br>") || `<span class="muted">—</span>`}</td><td class="evidence">${inline(f.evidence)}</td></tr>`).join("");
     const store = p.store.map((r) => `<li>${r.met === true ? state("ok", "Met") : r.met === false ? state("must", "Not met") : state("human", "Check")} ` +
       `${inline(r.rule)}${r.date ? ` <span class="tag">${esc(r.date)}</span>` : ""}${typeof r.url === "string" && safeUrl(r.url) ? ` <a href="${esc(r.url)}">source</a>` : ""}</li>`).join("");
@@ -405,7 +423,7 @@ function targetsView(data) {
     hero: thesis + matrix(groups, "Platform changes by impact"),
     body: [
       targetTables,
-      section("changes", "Platform changes", filters([["group", "Impact", TARGET_GROUPS.filter(([k]) => groups.find((g) => g.key === k).items.length).map(([k, l]) => [k, l])],
+      !changes.length ? "" : section("changes", "Platform changes", filters([["group", "Impact", TARGET_GROUPS.filter(([k]) => groups.find((g) => g.key === k).items.length).map(([k, l]) => [k, l])],
         ["platform", "Platform", platformChips]], "Filter by change, version or file") +
         `<div class="table-wrap"><table class="data"><thead><tr><th data-sort="platform">Platform</th><th>Version</th><th>Change</th><th data-sort="group">Impact</th><th>Where in the app</th></tr></thead>` +
         `<tbody>${table}</tbody></table></div>`),

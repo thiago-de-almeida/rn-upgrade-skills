@@ -213,3 +213,19 @@ test("targets page: a platform with nothing to move says so, and bad shapes stil
   const html = renderPage(targetsMd({ platforms: [null, { platform: 1, fields: "x", changes: {}, store: "y" }] }));
   assert.match(html, /id="full-report"/);
 });
+
+test("targets page: only real increases move, unknowns say so, platforms merge, no empty changes table", () => {
+  const html = renderPage(targetsMd({ platforms: [
+    { platform: "android", fields: [
+      { name: "targetSdk", current: "36", required: "35" },
+      { name: "compileSdk", current: "34", required: "36" },
+      { name: "ndk", current: "27.1", required: "" },
+    ], changes: [] },
+    { platform: "Android", fields: [{ name: "minSdk", current: "24", required: "24.0" }], changes: [] },
+    { platform: "ios", fields: [{ name: "deploymentTarget", current: "15.1", required: "15.1.0" }], changes: [] },
+  ] }));
+  assert.match(html, /<p class="thesis">Android: compileSdk 34 → 36\. iOS: nothing has to move\./);
+  assert.equal(count(html, 'id="targets-android"'), 1);
+  assert.match(html, /<td class="name">ndk<\/td>[\s\S]*?unknown/);
+  assert.ok(!html.includes('id="changes"'), "empty changes section should be hidden");
+});

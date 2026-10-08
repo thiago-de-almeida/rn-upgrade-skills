@@ -59,14 +59,14 @@ From the root of your app's repository:
 /rn-upgrade:check-platform-targets 0.86.3 .
 ```
 
-Both skills take the same arguments: `<target-version> <app-root> [from-version]`.
+Run them in that order: `check-platform-targets` reads the `audit-libraries` report. All three skills take the same arguments: `<target-version> <app-root> [from-version]`.
 
 - `app-root` is the folder with the app's `package.json`, `android/` and `ios/`. Use `.` when the
   app is at the repo root, or e.g. `example` in a library repo.
 - `from-version` is detected from your lockfile when omitted.
 
 Each skill runs in a dedicated subagent on Sonnet (`rn-upgrade-applier` leaves all changes
-**uncommitted**; `rn-upgrade-auditor` only reads). It saves the full report outside your repo, in
+**uncommitted**; `rn-upgrade-auditor` and `rn-upgrade-platform-checker` only read). It saves the full report outside your repo, in
 `~/rn-upgrade-reports/<repo>/`, and returns a short summary with the report's path.
 
 ### HTML report
@@ -83,7 +83,7 @@ report somewhere else:
 
 To render a report you already have:
 `node plugins/rn-upgrade/skills/audit-libraries/scripts/render-html.mjs audit.md` (the script is
-the same in both skills).
+the same in every skill).
 
 ## Install (Codex)
 
@@ -107,7 +107,7 @@ cp -R /path/to/rn-upgrade-skills/skills/audit-libraries .agents/skills/
 cp -R /path/to/rn-upgrade-skills/skills/check-platform-targets .agents/skills/
 ```
 
-Copy the whole folder: both skills ship a `scripts/` folder next to their `SKILL.md`.
+Copy the whole folder: every skill ships a `scripts/` folder next to its `SKILL.md`.
 
 For use across projects, copy it to `~/.agents/skills/` instead. Install it in only one
 scope (installer, repo or user folder) to avoid duplicate entries. Codex detects new skills

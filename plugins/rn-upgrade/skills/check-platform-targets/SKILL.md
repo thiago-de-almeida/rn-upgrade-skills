@@ -40,8 +40,13 @@ and report which input is missing. Do not infer them from branch names, commits 
 1. Record `git status --porcelain` for the repository. You will compare it at the end.
 2. Detect the React Native version the app resolves (lockfile, or `React-Core` in
    `ios/Podfile.lock`). If FROM_VERSION was given and differs, use the resolved version and flag it.
-3. If APP_ROOT has no `android/` or `ios/` folder (managed Expo), stop: the target values live in
-   the Expo SDK, and this skill does not apply.
+3. If APP_ROOT has neither `android/` nor `ios/` (managed Expo), stop: the target values live in
+   the Expo SDK and `expo-build-properties`, and this skill does not apply. With only one of the two
+   folders, check that platform and say the other is not in the repo.
+4. "Current" means the committed project. If `git status` shows changes under `android/`, `ios/`
+   or `package.json` (for example, `apply-upgrade-diff` ran and left its edits uncommitted), read
+   every current value with `git show HEAD:<path>` instead of the working tree, and say so in the
+   report.
 
 ## Step 2 — Current values
 
@@ -49,8 +54,10 @@ Record each value with its file:line. When a value comes from `rootProject.ext`,
 or a default, record where it resolves, not a guess.
 
 - Android: `minSdkVersion`, `compileSdkVersion`, `targetSdkVersion`, `buildToolsVersion`,
-  `ndkVersion`, Kotlin, AGP (`android/build.gradle`, `android/app/build.gradle`,
-  `gradle.properties`) and Gradle (`gradle/wrapper/gradle-wrapper.properties`).
+  `ndkVersion` and Kotlin (`android/build.gradle`, `android/app/build.gradle`, `gradle.properties`),
+  Gradle (`gradle/wrapper/gradle-wrapper.properties`), and AGP: when the classpath has no version,
+  it comes from the installed React Native's `gradle/libs.versions.toml` (`agp = "…"`) through
+  `@react-native/gradle-plugin`; read it from `https://cdn.jsdelivr.net/npm/react-native@<FROM>/gradle/libs.versions.toml`.
 - iOS: `platform :ios` in the Podfile (and what `min_ios_version_supported` resolves to),
   `IPHONEOS_DEPLOYMENT_TARGET` for every target in `project.pbxproj` (app, extensions, tests), and
   the Xcode version the team builds with: `.xcode-version`, CI workflows (`xcode-version`,
@@ -60,16 +67,18 @@ or a default, record where it resolves, not a guess.
 
 1. **React Native.** Read the target template:
    `https://raw.githubusercontent.com/react-native-community/rn-diff-purge/release/<TARGET>/RnDiffApp/android/build.gradle`,
-   the gradle wrapper next to it, and the template Podfile. Resolve `min_ios_version_supported`
-   from `https://cdn.jsdelivr.net/npm/react-native@<TARGET>/scripts/cocoapods/helpers.rb`. Find the
-   minimum Xcode for the target in React Native's release notes or CHANGELOG
-   (`https://github.com/facebook/react-native/blob/main/CHANGELOG.md`).
+   the gradle wrapper next to it, and the template Podfile. AGP and Kotlin come from
+   `https://cdn.jsdelivr.net/npm/react-native@<TARGET>/gradle/libs.versions.toml`.
+   `min_ios_version_supported` and `min_xcode_version_supported` come from
+   `https://cdn.jsdelivr.net/npm/react-native@<TARGET>/scripts/cocoapods/helpers.rb`.
 2. **Libraries.** Look for the `audit-libraries` report of the same versions in the report folder
    (`~/rn-upgrade-reports/<repo>/audit-libraries-<FROM>-to-<TARGET>.md`, or next to REPORT_PATH).
    From its json block, take `globalConstraints` and every library's `native` values (minSdk,
    compileSdk, Kotlin, AGP, iOS deployment target) for the version it recommends. If there is no
    such report, write "libraries not checked: run audit-libraries" and go on. Never audit the
-   libraries yourself.
+   libraries yourself. When the app uses Expo modules, the audit report's global constraints carry
+   the Expo SDK's requirements (for example its minimum iOS); `expo-build-properties` in `app.json`
+   or `app.config.*` can also set SDK levels and the deployment target.
 3. **Stores**, read now, never from memory:
    - Google Play: `https://developer.android.com/google/play/requirements/target-sdk` — the target
      API level new apps and updates need, from which date, and any extension.
@@ -87,10 +96,14 @@ A change belongs in the report only when this upgrade causes it: a value that mo
 the app already gets today, because its current SDK or Xcode already brings them, are out of scope.
 
 1. **Android.** For every API level the target SDK crosses (current + 1 up to the required one),
-   read `https://developer.android.com/about/versions/<N>/behavior-changes-<N>` (the changes for
-   apps that target that level).
+   read the changes for apps that target that level. The page is keyed by the Android version, not
+   the API level: `https://developer.android.com/about/versions/<V>/behavior-changes-<V>`, with
+   API 33 → 13, 34 → 14, 35 → 15, 36 → 16, 37 → 17 (API 32, Android 12L, has no page: skip it).
+   When minSdk moves, list the Android versions the app stops supporting and the
+   `Build.VERSION.SDK_INT` checks (and `Platform.Version` checks in JS) that become dead code.
 2. **iOS.** Only when the required Xcode is newer than the one the team builds with today, read the
-   release notes of the SDK it brings, as JSON (the HTML pages are rendered in JavaScript):
+   release notes of every iOS SDK major between the two (Xcode 15 → 26 crosses the iOS 18 and 26
+   SDKs), as JSON (the HTML pages are rendered in JavaScript):
    `https://developer.apple.com/tutorials/data/documentation/ios-ipados-release-notes/ios-ipados-<N>-release-notes.json`.
    Keep the changes that apply to apps linked against that SDK. If the team's Xcode is unknown,
    list them, say they apply only if the team builds with an older Xcode, and add an open question.
