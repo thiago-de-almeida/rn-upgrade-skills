@@ -11,8 +11,8 @@
     {
       "name": "rn-upgrade",
       "source": "./plugins/rn-upgrade",
-      "description": "Apply the React Native Upgrade Helper diff, explain every hunk that fails, and audit which libraries need an upgrade.",
-      "version": "0.3.0"
+      "description": "Apply the React Native Upgrade Helper diff, explain every hunk that fails, audit which libraries need an upgrade, and check the Android and iOS targets.",
+      "version": "0.4.0"
     }
   ]
 }

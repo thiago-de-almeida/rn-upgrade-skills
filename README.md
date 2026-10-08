@@ -11,8 +11,7 @@ Available as a Claude Code plugin and a standalone Codex skill.
 |---|---|---|
 | [`apply-upgrade-diff`](plugins/rn-upgrade/skills/apply-upgrade-diff/SKILL.md) | ✅ available | The Upgrade Helper diff applied to your project, plus a report that explains every hunk that did not apply cleanly (with file:line and commit evidence). [Real example](examples/react-native-video-0.77.3-to-0.86.3.md). |
 | [`audit-libraries`](plugins/rn-upgrade/skills/audit-libraries/SKILL.md) | ✅ available | Which third-party libraries must be upgraded, replaced or patched for the target RN version, which of their breaking changes affect your code, and a JSON block for the timeline. Report only: it changes nothing. [Real example](examples/rocket-chat-0.81.5-to-0.86.3.md). |
-| `check-android-target` | 🗓 planned | Whether the Android target/compile SDK must move, and what that implies. |
-| `check-ios-target` | 🗓 planned | Whether the iOS deployment target must move, and what that implies. |
+| [`check-platform-targets`](plugins/rn-upgrade/skills/check-platform-targets/SKILL.md) | ✅ available | For Android and iOS, which SDK levels, deployment target and Xcode version must move, who requires each (React Native, a library, Google Play, the App Store) and by when, and which platform behaviour changes affect your code. Report only. [Real example](examples/rocket-chat-platform-targets-0.81.5-to-0.86.3.md). |
 | `estimate-timeline` | 🗓 planned | A timeline built from the reports above. |
 
 ## Prerequisites
@@ -33,6 +32,13 @@ Available as a Claude Code plugin and a standalone Codex skill.
   `apply-upgrade-diff`; after, it audits the versions still in your lockfile and flags it as stale.
 - Bare apps that use Expo modules are covered: the target Expo SDK decides those versions. Managed Expo apps (no committed `android/` and `ios/`) are out of scope; move to the matching SDK and use `npx expo install --check` instead.
 
+`check-platform-targets`:
+
+- Network access to rn-diff-purge, jsDelivr, developer.android.com and developer.apple.com.
+- Run it after `audit-libraries`: it reads that report for the libraries' SDK and deployment-target
+  requirements. Without it, the libraries are left out and the report says so.
+- No clean working tree needed: it does not change files.
+
 ## Install (Claude Code)
 
 ```
@@ -50,16 +56,17 @@ From the root of your app's repository:
 ```
 /rn-upgrade:apply-upgrade-diff 0.86.3 .
 /rn-upgrade:audit-libraries 0.86.3 .
+/rn-upgrade:check-platform-targets 0.86.3 .
 ```
 
-Both skills take the same arguments: `<target-version> <app-root> [from-version]`.
+Run them in that order: `check-platform-targets` reads the `audit-libraries` report. All three skills take the same arguments: `<target-version> <app-root> [from-version]`.
 
 - `app-root` is the folder with the app's `package.json`, `android/` and `ios/`. Use `.` when the
   app is at the repo root, or e.g. `example` in a library repo.
 - `from-version` is detected from your lockfile when omitted.
 
 Each skill runs in a dedicated subagent on Sonnet (`rn-upgrade-applier` leaves all changes
-**uncommitted**; `rn-upgrade-auditor` only reads). It saves the full report outside your repo, in
+**uncommitted**; `rn-upgrade-auditor` and `rn-upgrade-platform-checker` only read). It saves the full report outside your repo, in
 `~/rn-upgrade-reports/<repo>/`, and returns a short summary with the report's path.
 
 ### HTML report
@@ -76,7 +83,7 @@ report somewhere else:
 
 To render a report you already have:
 `node plugins/rn-upgrade/skills/audit-libraries/scripts/render-html.mjs audit.md` (the script is
-the same in both skills).
+the same in every skill).
 
 ## Install (Codex)
 
@@ -86,6 +93,7 @@ Ask Codex to install the standalone skill from this repository. The installer pu
 ```text
 $skill-installer Install https://github.com/thiago-de-almeida/rn-upgrade-skills/tree/main/skills/apply-upgrade-diff
 $skill-installer Install https://github.com/thiago-de-almeida/rn-upgrade-skills/tree/main/skills/audit-libraries
+$skill-installer Install https://github.com/thiago-de-almeida/rn-upgrade-skills/tree/main/skills/check-platform-targets
 ```
 
 Alternatively, clone this repository and copy the skill into your app's `.agents/skills`
@@ -96,9 +104,10 @@ with your clone's path):
 mkdir -p .agents/skills
 cp -R /path/to/rn-upgrade-skills/skills/apply-upgrade-diff .agents/skills/
 cp -R /path/to/rn-upgrade-skills/skills/audit-libraries .agents/skills/
+cp -R /path/to/rn-upgrade-skills/skills/check-platform-targets .agents/skills/
 ```
 
-Copy the whole folder: both skills ship a `scripts/` folder next to their `SKILL.md`.
+Copy the whole folder: every skill ships a `scripts/` folder next to its `SKILL.md`.
 
 For use across projects, copy it to `~/.agents/skills/` instead. Install it in only one
 scope (installer, repo or user folder) to avoid duplicate entries. Codex detects new skills
@@ -131,8 +140,8 @@ Codex runs the workflow in the current session, leaves changes **uncommitted**, 
 a summary with the report's path. The same prerequisites and upgrade scope apply to both hosts. Use a high
 reasoning effort: the skill investigates every failed hunk in the code and git history.
 
-`$audit-libraries` takes the same inputs. It needs network access: approve it when Codex asks,
-or run Codex with network enabled for the session.
+`$audit-libraries` and `$check-platform-targets` take the same inputs. They need network access:
+approve it when Codex asks, or run Codex with network enabled for the session.
 
 `$apply-upgrade-diff` stops if the app's working tree is not clean. With a repo-local installation, either
 commit `.agents/` or add it to `.git/info/exclude` before running it.
@@ -141,8 +150,8 @@ commit `.agents/` or add it to `.git/info/exclude` before running it.
 
 The skills are plain Markdown. Copy the body of a `SKILL.md` (everything after the `---`
 frontmatter), fill in the **Inputs** section, and paste it into any agent that can run shell
-commands, use git and reach the internet. A plain chat without tools will not work. For
-`audit-libraries`, replace `${CLAUDE_SKILL_DIR}` with the path of the skill folder in your clone.
+commands, use git and reach the internet. A plain chat without tools will not work. Replace
+`${CLAUDE_SKILL_DIR}` with the path of the skill folder in your clone.
 
 ## What `apply-upgrade-diff` does not do
 
@@ -155,6 +164,12 @@ report lists them.
 It reads and reports. It does **not** edit `package.json`, install, upgrade libraries, fix your
 code for their breaking changes, or audit the packages the RN template owns (`react`,
 `@react-native/*`, babel, eslint, typescript): `apply-upgrade-diff` handles those.
+
+## What `check-platform-targets` does not do
+
+It reads and reports. It does **not** change Gradle, the Podfile or Xcode settings, audit libraries
+one by one (it reads the `audit-libraries` report), or list the behaviour changes every app gets on
+a new OS whatever its target.
 
 ## Contributing
 

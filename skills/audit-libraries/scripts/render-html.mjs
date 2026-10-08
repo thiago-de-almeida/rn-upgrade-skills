@@ -188,7 +188,8 @@ export function extractData(md) {
 // Page
 
 // Ids the page itself uses; report headings never take them.
-const RESERVED_IDS = ["tip", "q", "shown", "overview", "libraries", "files", "blockers", "constraints", "questions", "hand", "next", "full-report"];
+const RESERVED_IDS = ["tip", "q", "shown", "overview", "libraries", "files", "blockers", "constraints", "questions", "hand", "next",
+  "changes", "targets-android", "targets-ios", "full-report"];
 const VERDICTS = ["ok as is", "minor bump", "major bump", "replace", "patch/fork", "needs human"];
 const RESULTS = ["applied clean", "applied by hand", "skipped", "needs human"];
 const AUDIT_GROUPS = [["must", "Must change"], ["should", "Should change"], ["human", "Needs a human"], ["ok", "OK as is"]];
@@ -355,20 +356,103 @@ function diffView(data) {
   };
 }
 
+const TARGET_GROUPS = [["must", "Affects the app", "yes"], ["human", "Unknown", "unknown"], ["ok", "Does not affect", "no"]];
+const PLATFORM = { android: "Android", ios: "iOS" };
+const platformName = (p) => PLATFORM[String(p ?? "").toLowerCase()] ?? String(p ?? "Platform");
+// Dotted versions compare numerically ("15.1" = "15.1.0" < "16.4"); anything else only by text.
+function compareVersions(a, b) {
+  if (!/^\d+(\.\d+)*$/.test(a) || !/^\d+(\.\d+)*$/.test(b)) return a === b ? 0 : NaN;
+  const x = a.split(".").map(Number), y = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
+  }
+  return 0;
+}
+// A value moves only when the required one is known and higher (or not comparable and different).
+const moves = (f) => {
+  if (!f.required) return false;
+  const c = compareVersions(f.required, f.current);
+  return Number.isNaN(c) ? f.current !== f.required : c > 0;
+};
+
+function targetsView(data) {
+  // One entry per platform, even if the data lists "android" twice.
+  const byName = new Map();
+  for (const p of objs(data.platforms)) {
+    const name = platformName(p.platform);
+    const entry = byName.get(name) ?? byName.set(name, { name, fields: [], store: [], changes: [] }).get(name);
+    entry.fields.push(...objs(p.fields).map((f) => ({ ...f, name: String(f.name ?? ""), current: String(f.current ?? "").trim(), required: String(f.required ?? "").trim() })));
+    entry.store.push(...objs(p.store));
+    entry.changes.push(...objs(p.changes).map((c) => ({ ...c, affects: ["yes", "no"].includes(c.affects) ? c.affects : "unknown" })));
+  }
+  const platforms = [...byName.values()];
+  const changes = platforms.flatMap((p) => p.changes.map((c) => ({ ...c, platform: p.name })));
+  const keyOf = (affects) => TARGET_GROUPS.find(([, , a]) => a === affects)[0];
+  const rows = changes.map((c, n) => ({ c, id: `r${n}`, group: keyOf(c.affects) }));
+  const yes = changes.filter((c) => c.affects === "yes").length;
+  const unknown = changes.filter((c) => c.affects === "unknown").length;
+  const perPlatform = platforms.map((p) => {
+    // Values with the same move (the Podfile and every target going 15.1 → 16.4) read as one.
+    const groups = new Map();
+    for (const f of p.fields.filter(moves)) {
+      const key = `${f.current}→${f.required}`;
+      groups.set(key, [...(groups.get(key) ?? []), f]);
+    }
+    const moving = [...groups.values()].map(([f, ...rest]) =>
+      `${esc(f.name)} ${esc(f.current || "?")} → ${esc(f.required)}${rest.length ? ` (+${rest.length} more)` : ""}`);
+    return `${esc(p.name)}: ${moving.length ? moving.join(", ") : "nothing has to move"}.`;
+  }).join(" ");
+  const thesis = `<p class="thesis">${perPlatform} <b>${yes}</b> of ${changes.length} platform changes ${yes === 1 ? "affects" : "affect"} the app` +
+    `${unknown ? `, <b>${unknown}</b> unknown` : ""}.</p>`;
+  const groups = TARGET_GROUPS.map(([key, label]) => ({
+    key, label, items: rows.filter((x) => x.group === key).map((x) => ({ id: x.id, tip: `${x.c.platform} · ${x.c.version ?? ""} · ${x.c.summary ?? ""}` })),
+  }));
+  const label = Object.fromEntries(TARGET_GROUPS.map(([k, l]) => [k, l]));
+
+  const targetTables = platforms.map((p) => {
+    const body = p.fields.map((f) => `<tr><td class="name">${esc(f.name)}</td>` +
+      `<td class="ver"><span class="from">${esc(f.current || "?")}</span><span class="arrow" aria-hidden="true">→</span><span class="to">${esc(f.required || "?")}</span></td>` +
+      `<td>${!f.required ? `<span class="muted">unknown</span>` : moves(f) ? state("should", "Moves") : `<span class="muted">stays</span>`}</td>` +
+      `<td>${arr(f.requiredBy).map(inline).join("<br>") || `<span class="muted">—</span>`}</td><td class="evidence">${inline(f.evidence)}</td></tr>`).join("");
+    const store = p.store.map((r) => `<li>${r.met === true ? state("ok", "Met") : r.met === false ? state("must", "Not met") : state("human", "Check")} ` +
+      `${inline(r.rule)}${r.date ? ` <span class="tag">${esc(r.date)}</span>` : ""}${typeof r.url === "string" && safeUrl(r.url) ? ` <a href="${esc(r.url)}">source</a>` : ""}</li>`).join("");
+    return section(`targets-${slugify(p.name)}`, `${p.name} targets`,
+      (body ? `<div class="table-wrap"><table class="data"><thead><tr><th>Value</th><th>Current → required</th><th></th><th>Required by</th><th>Evidence</th></tr></thead><tbody>${body}</tbody></table></div>` : `<p class="muted">No values in the data block.</p>`) +
+      (store ? `<ul class="store">${store}</ul>` : ""));
+  }).join("\n");
+
+  const table = rows.map(({ c, id, group }) => `<tr class="row" id="${id}" data-group="${group}" data-platform="${esc(c.platform)}" ` +
+    `data-search="${esc([c.platform, c.version, c.summary, ...arr(c.files)].join(" ").toLowerCase())}">` +
+    `<td class="name">${esc(c.platform)}</td><td class="mono">${esc(c.version ?? "")}</td><td>${inline(c.summary)}</td><td>${state(group, label[group])}</td>` +
+    `<td class="evidence">${arr(c.files).map(inline).join("<br>") || `<span class="muted">—</span>`}${c.evidence ? `<br><span class="muted">${inline(c.evidence)}</span>` : ""}</td></tr>`).join("");
+  const platformChips = platforms.map((p) => [p.name, p.name]);
+  return {
+    hero: thesis + matrix(groups, "Platform changes by impact"),
+    body: [
+      targetTables,
+      !changes.length ? "" : section("changes", "Platform changes", filters([["group", "Impact", TARGET_GROUPS.filter(([k]) => groups.find((g) => g.key === k).items.length).map(([k, l]) => [k, l])],
+        ["platform", "Platform", platformChips]], "Filter by change, version or file") +
+        `<div class="table-wrap"><table class="data"><thead><tr><th data-sort="platform">Platform</th><th>Version</th><th>Change</th><th data-sort="group">Impact</th><th>Where in the app</th></tr></thead>` +
+        `<tbody>${table}</tbody></table></div>`),
+      arr(data.openQuestions).length ? section("questions", "Decisions for a human", `<ol class="questions">${arr(data.openQuestions).map((q) => `<li>${inline(q)}</li>`).join("")}</ol>`) : "",
+    ].join("\n"),
+  };
+}
+
 export function renderPage(md, { source = "report.md" } = {}) {
   const { html: reportHtml, headings } = markdownToHtml(md, { reserved: RESERVED_IDS });
   const { data: raw, error: dataError } = extractData(md);
   const data = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : null;
   if (data && !(data.rn && typeof data.rn === "object")) data.rn = null;
-  const kind = Array.isArray(data?.libraries) ? "audit" : Array.isArray(data?.files) ? "diff" : null;
+  const kind = Array.isArray(data?.libraries) ? "audit" : Array.isArray(data?.files) ? "diff" : Array.isArray(data?.platforms) ? "targets" : null;
   const title = headings.find((h) => h.level === 1)?.text.replace(/`/g, "") ?? source;
-  let view = null, error = dataError ?? (raw && !kind ? "the json block has neither libraries nor files" : null);
+  let view = null, error = dataError ?? (raw && !kind ? "the json block has no libraries, files or platforms" : null);
   try {
-    view = kind === "audit" ? auditView(data, headings) : kind === "diff" ? diffView(data) : null;
+    view = kind === "audit" ? auditView(data, headings) : kind === "diff" ? diffView(data) : kind === "targets" ? targetsView(data) : null;
   } catch (e) {
     error = `the summary could not be built (${e.message})`;
   }
-  const kindLabel = kind === "audit" ? "Library audit" : kind === "diff" ? "Upgrade Helper diff" : "Report";
+  const kindLabel = kind === "audit" ? "Library audit" : kind === "diff" ? "Upgrade Helper diff" : kind === "targets" ? "Platform targets" : "Report";
   const diffLink = typeof data?.diffUrl === "string" && safeUrl(data.diffUrl) ? ` · <a href="${esc(data.diffUrl)}">the diff</a>` : "";
   const notice = view ? "" : `<p class="notice" role="note">No data block in this report${error && !error.startsWith("no ") ? ` (${esc(error)})` : ""}, so there is no summary: the full report is below.</p>`;
   const toc = headings.filter((h) => h.level === 2).map((h) => `<li><a href="#${h.id}">${inline(h.text)}</a></li>`).join("");
@@ -479,6 +563,7 @@ main{padding:8px 16px 0}
 .b-name{font:600 14px/1.4 var(--mono);overflow-wrap:anywhere}
 .b-what{color:var(--ink-2);font-size:14px}
 .b-tags{display:flex;gap:4px;justify-content:flex-end}
+.store{margin:12px 0 0;padding:0;list-style:none}.store li{padding:6px 0;font-size:14px}
 .questions li{position:relative;padding:12px 0 12px 40px;border-bottom:1px solid var(--rule-2);counter-increment:n}
 .questions li::before{content:counter(n);position:absolute;left:0;top:10px;width:26px;height:26px;display:grid;place-items:center;border-radius:50%;background:var(--human);color:#fff;font:600 13px/1 var(--mono)}
 .hand{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
