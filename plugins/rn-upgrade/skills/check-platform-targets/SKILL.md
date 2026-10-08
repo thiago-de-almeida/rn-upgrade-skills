@@ -78,18 +78,24 @@ or a default, record where it resolves, not a guess.
    Quote each rule with its date and URL.
 
 For each value, the **required** value is the highest one any source requires, and **required by**
-names every source that sets it. A value that no source raises stays as it is.
+names every source that sets it. When the current value already meets every source, the required
+value is the current one (never write a lower number), and `required by` is empty.
 
 ## Step 4 — Platform behaviour changes
+
+A change belongs in the report only when this upgrade causes it: a value that moves. Changes
+the app already gets today, because its current SDK or Xcode already brings them, are out of scope.
 
 1. **Android.** For every API level the target SDK crosses (current + 1 up to the required one),
    read `https://developer.android.com/about/versions/<N>/behavior-changes-<N>` (the changes for
    apps that target that level).
-2. **iOS.** For the SDK the required Xcode builds against, read the iOS release notes as JSON (the
-   HTML pages are rendered in JavaScript):
+2. **iOS.** Only when the required Xcode is newer than the one the team builds with today, read the
+   release notes of the SDK it brings, as JSON (the HTML pages are rendered in JavaScript):
    `https://developer.apple.com/tutorials/data/documentation/ios-ipados-release-notes/ios-ipados-<N>-release-notes.json`.
-   Keep the changes that apply to apps linked against that SDK. Also list what raising the
-   deployment target does: the iOS versions the app stops supporting.
+   Keep the changes that apply to apps linked against that SDK. If the team's Xcode is unknown,
+   list them, say they apply only if the team builds with an older Xcode, and add an open question.
+   When the deployment target moves, list what that does: the iOS versions the app stops
+   supporting, and `#available`/`@available` checks that become dead code.
 3. For every change, search the app under APP_ROOT (native code, `AndroidManifest.xml`,
    `Info.plist`, entitlements, and the JS screens when the change is about layout or navigation),
    excluding `node_modules`. Mark it `yes` (with file:line), `no` (say why: the API is not used, or
@@ -111,7 +117,8 @@ Write the report in Markdown with these sections:
    `value | current | required | required by | evidence`.
 3. **Store rules**: `platform | rule | date | met by the required values | URL`.
 4. **Platform changes**, one table per platform:
-   `version | change | affects | where in the app | evidence`.
+   `version | change | affects | where in the app | evidence`. When nothing moves on a platform,
+   write one sentence saying why and leave its table and its `changes` list empty: no placeholder rows.
 5. **Open questions** for a human.
 6. **Data**: a fenced `json` block with exactly this shape, for tools that read the report:
 ```json
