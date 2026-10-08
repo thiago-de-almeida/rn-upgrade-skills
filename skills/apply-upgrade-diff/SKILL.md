@@ -15,8 +15,8 @@ apply that diff to this project, and to explain every part of it that does not a
 
 Read TARGET_VERSION, APP_ROOT, and optional FROM_VERSION from the user's request, either as
 `KEY=VALUE` pairs (`$apply-upgrade-diff TARGET_VERSION=0.86.3 APP_ROOT=.`) or positionally in that
-order (`$apply-upgrade-diff 0.86.3 .`). The user may also provide REPORT_PATH, a file outside the
-app's repo to save the report to, and HTML=no to skip the HTML page saved next to it.
+order (`$apply-upgrade-diff 0.86.3 .`). The user may also provide REPORT_PATH, to save the report
+somewhere other than the default, and HTML=no to skip the HTML page saved next to it.
 Follow this workflow exactly, stay inside its scope, and back every claim in your report with
 evidence (file:line, commit SHA, command output).
 `<SKILL_DIR>` below is the folder that contains this SKILL.md, not the current directory. Resolve
@@ -164,10 +164,13 @@ Write the report in Markdown with these sections:
 ```
 `result` uses the four results above. Values that come from the sections above must match them.
 
-Return the full report, all sections, as your final message. If REPORT_PATH was given and your
-environment allows writing it, also save the report there; otherwise state that it was not saved.
+Save the full report, all sections, to REPORT_PATH or, by default, to
+`~/rn-upgrade-reports/<repo>/apply-upgrade-diff-<FROM>-to-<TARGET>.md`, where `<repo>` is the name of the
+repository's root folder. Expand `~` to the home folder, create missing folders, and never save
+inside the repository. Then, unless HTML is `no`, run
+`node "<SKILL_DIR>/scripts/render-html.mjs" "<report path>"`: it writes a self-contained HTML
+page next to the report and prints its path. Never write the HTML yourself.
 
-If you saved the report and HTML is not `no`, run
-`node "<SKILL_DIR>/scripts/render-html.mjs" "<REPORT_PATH>"`: it writes a self-contained HTML
-page next to the report and prints its path. End your final message with `HTML report: <path>`. If
-the script fails, say so in one line. Never write the HTML yourself.
+Your final message is short: section 1, the count per result, and the open questions (section 4), then `Report: <path>` and `HTML report: <path>`. If the
+report could not be saved, return the full report instead and say why. If only the HTML failed, say
+so in one line.
