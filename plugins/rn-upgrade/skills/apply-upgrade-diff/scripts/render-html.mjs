@@ -392,7 +392,14 @@ function targetsView(data) {
   const yes = changes.filter((c) => c.affects === "yes").length;
   const unknown = changes.filter((c) => c.affects === "unknown").length;
   const perPlatform = platforms.map((p) => {
-    const moving = p.fields.filter(moves).map((f) => `${esc(f.name)} ${esc(f.current || "?")} → ${esc(f.required)}`);
+    // Values with the same move (the Podfile and every target going 15.1 → 16.4) read as one.
+    const groups = new Map();
+    for (const f of p.fields.filter(moves)) {
+      const key = `${f.current}→${f.required}`;
+      groups.set(key, [...(groups.get(key) ?? []), f]);
+    }
+    const moving = [...groups.values()].map(([f, ...rest]) =>
+      `${esc(f.name)} ${esc(f.current || "?")} → ${esc(f.required)}${rest.length ? ` (+${rest.length} more)` : ""}`);
     return `${esc(p.name)}: ${moving.length ? moving.join(", ") : "nothing has to move"}.`;
   }).join(" ");
   const thesis = `<p class="thesis">${perPlatform} <b>${yes}</b> of ${changes.length} platform changes ${yes === 1 ? "affects" : "affect"} the app` +

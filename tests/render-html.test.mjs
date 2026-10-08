@@ -229,3 +229,12 @@ test("targets page: only real increases move, unknowns say so, platforms merge, 
   assert.match(html, /<td class="name">ndk<\/td>[\s\S]*?unknown/);
   assert.ok(!html.includes('id="changes"'), "empty changes section should be hidden");
 });
+
+test("targets thesis: values with the same move are grouped", () => {
+  const html = renderPage(targetsMd({ platforms: [{ platform: "ios", fields: [
+    { name: "Podfile platform :ios", current: "15.1", required: "16.4" },
+    { name: "IPHONEOS_DEPLOYMENT_TARGET App", current: "15.1", required: "16.4" },
+    { name: "IPHONEOS_DEPLOYMENT_TARGET Ext", current: "15.1", required: "16.4" },
+  ], changes: [] }] }));
+  assert.match(html, /<p class="thesis">iOS: Podfile platform :ios 15\.1 → 16\.4 \(\+2 more\)\./);
+});
