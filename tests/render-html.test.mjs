@@ -11,10 +11,12 @@ const SKILLS = "plugins/rn-upgrade/skills";
 const RENDERER = `${SKILLS}/audit-libraries/scripts/render-html.mjs`;
 const count = (text, needle) => text.split(needle).length - 1;
 
-test("both skills ship the same renderer and fonts", () => {
-  for (const file of ["render-html.mjs", "render-html-fonts.mjs"]) {
-    assert.equal(readFileSync(`${SKILLS}/apply-upgrade-diff/scripts/${file}`, "utf8"),
-      readFileSync(`${SKILLS}/audit-libraries/scripts/${file}`, "utf8"), file);
+test("every skill ships the same renderer and fonts", () => {
+  for (const skill of ["apply-upgrade-diff", "check-platform-targets"]) {
+    for (const file of ["render-html.mjs", "render-html-fonts.mjs"]) {
+      assert.equal(readFileSync(`${SKILLS}/${skill}/scripts/${file}`, "utf8"),
+        readFileSync(`${SKILLS}/audit-libraries/scripts/${file}`, "utf8"), `${skill}/${file}`);
+    }
   }
 });
 
@@ -171,4 +173,43 @@ test("diff thesis: no file left unapplied is not the same as no decisions", () =
   const md = "# D\n\n```json\n" + JSON.stringify({ files: [{ file: "a", result: "applied clean" }, { file: "b", result: "skipped" }],
     openQuestions: ["x?", "y?"] }) + "\n```\n";
   assert.match(renderPage(md), /1 was skipped and none were left unapplied\. <b>2<\/b> decisions need a human\./);
+});
+
+const targetsData = {
+  rn: { from: "0.81.5", to: "0.86.3" },
+  platforms: [
+    { platform: "android",
+      fields: [
+        { name: "targetSdk", current: "34", required: "36", requiredBy: ["React Native 0.86.3 template", "Google Play (2026-08-31)"], evidence: "android/build.gradle:5" },
+        { name: "minSdk", current: "24", required: "24", requiredBy: ["React Native 0.86.3 template"], evidence: "android/build.gradle:4" },
+      ],
+      store: [{ rule: "New apps and updates must target API 36", date: "2026-08-31", url: "https://developer.android.com/google/play/requirements/target-sdk", met: true }],
+      changes: [
+        { version: "Android 15", summary: "Edge-to-edge is enforced <b>", affects: "yes", files: ["MainActivity.kt:12"], evidence: "https://developer.android.com/about/versions/15/behavior-changes-15" },
+        { version: "Android 16", summary: "Predictive back", affects: "unknown", files: [], evidence: "" },
+      ] },
+    { platform: "ios",
+      fields: [{ name: "deploymentTarget", current: "15.1", required: "16.4", requiredBy: ["Expo SDK 57"], evidence: "ios/Podfile:4" }],
+      store: [], changes: [{ version: "iOS 26 SDK", summary: "UIScene life cycle", affects: "no", files: [], evidence: "" }] },
+  ],
+  openQuestions: ["Keep portrait only?"],
+};
+const targetsMd = (data) => "# Platform targets\n\n## 6. Data\n\n```json\n" + JSON.stringify(data) + "\n```\n";
+
+test("targets page: what moves on each platform, and which platform changes hit the app", () => {
+  const html = renderPage(targetsMd(targetsData));
+  assert.match(html, /Platform targets<\/span>/);
+  assert.match(html, /<p class="thesis">Android: targetSdk 34 → 36\. iOS: deploymentTarget 15\.1 → 16\.4\. <b>1<\/b> of 3 platform changes affects the app, <b>1<\/b> unknown\.<\/p>/);
+  assert.equal(count(html, 'class="cell"'), 3);
+  assert.equal(count(html, 'class="row"'), 3);
+  assert.match(html, /Google Play \(2026-08-31\)/);
+  assert.match(html, /Edge-to-edge is enforced &lt;b&gt;/);
+  assert.match(html, /Keep portrait only\?/);
+});
+
+test("targets page: a platform with nothing to move says so, and bad shapes still render", () => {
+  const calm = renderPage(targetsMd({ platforms: [{ platform: "android", fields: [{ name: "minSdk", current: "24", required: "24" }], changes: [] }] }));
+  assert.match(calm, /Android: nothing has to move\. <b>0<\/b> of 0 platform changes affect the app\./);
+  const html = renderPage(targetsMd({ platforms: [null, { platform: 1, fields: "x", changes: {}, store: "y" }] }));
+  assert.match(html, /id="full-report"/);
 });
