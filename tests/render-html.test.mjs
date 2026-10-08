@@ -85,7 +85,7 @@ test("diff page: results, hand-applied hunks and questions from the data block",
   assert.match(html, /data-result="needs human"/);
   assert.match(html, /Conflict &lt;x&gt;/);
   assert.match(html, /kept the flavor block/);
-  assert.match(html, /<b>1<\/b> of 3 template files applied cleanly\. 1 needed a hand edit and <b>1<\/b> waits for a human\./);
+  assert.match(html, /<b>1<\/b> of 3 template files applied cleanly\. 1 needed a hand edit and <b>1<\/b> was left for a human\. <b>1<\/b> decision needs a human\./);
   assert.match(html, /Keep the custom Podfile hook\?/);
 });
 
@@ -165,4 +165,10 @@ test("a code span inside a link URL stays out of the href, and list types do not
   assert.ok(!inline("[b](https://c.com/`q`)").includes('href="https://c.com/<code>'));
   const { html } = markdownToHtml("1. a\n\n- b\n\n2. c\n");
   assert.match(html, /<ol><li>a<\/li><\/ol>\n<ul><li>b<\/li><\/ul>\n<ol start="2"><li>c<\/li><\/ol>/);
+});
+
+test("diff thesis: no file left unapplied is not the same as no decisions", () => {
+  const md = "# D\n\n```json\n" + JSON.stringify({ files: [{ file: "a", result: "applied clean" }, { file: "b", result: "skipped" }],
+    openQuestions: ["x?", "y?"] }) + "\n```\n";
+  assert.match(renderPage(md), /1 was skipped and none were left unapplied\. <b>2<\/b> decisions need a human\./);
 });

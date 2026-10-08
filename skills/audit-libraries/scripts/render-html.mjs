@@ -327,10 +327,12 @@ function diffView(data) {
   const rest = [
     n("applied by hand") ? `${n("applied by hand")} needed a hand edit` : "",
     n("skipped") ? `${n("skipped")} ${n("skipped") === 1 ? "was" : "were"} skipped` : "",
-    n("needs human") ? `<b>${n("needs human")}</b> ${n("needs human") === 1 ? "waits" : "wait"} for a human` : "none wait for a human",
+    n("needs human") ? `<b>${n("needs human")}</b> ${n("needs human") === 1 ? "was" : "were"} left for a human` : "none were left unapplied",
   ].filter(Boolean);
+  const decisions = arr(data.openQuestions).length;
   const thesis = `<p class="thesis"><b>${n("applied clean")}</b> of ${plural(total, "template file", "template files")} applied cleanly. ` +
-    `${rest.length > 1 ? rest.slice(0, -1).join(", ") + " and " + rest.at(-1) : rest[0]}.</p>`;
+    `${rest.length > 1 ? rest.slice(0, -1).join(", ") + " and " + rest.at(-1) : rest[0]}.` +
+    (decisions ? ` <b>${decisions}</b> ${decisions === 1 ? "decision needs" : "decisions need"} a human.` : "") + `</p>`;
   const groups = DIFF_GROUPS.map(([key, label]) => ({
     key, label, items: rows.filter((x) => x.group === key).map((x) => ({ id: x.id, tip: `${x.f.file} · ${x.f.result}` })),
   }));
@@ -444,7 +446,7 @@ code,pre,.mono{font-family:var(--mono);font-size:.86em}
 .track::after{content:"";position:absolute;right:0;top:50%;width:12px;height:12px;border-top:2px solid var(--accent);border-right:2px solid var(--accent);transform:translate(-2px,-50%) rotate(45deg)}
 .stop{position:relative;width:2px;height:12px;background:var(--rule);z-index:1}
 .stop span{position:absolute;top:18px;left:50%;transform:translateX(-50%);font:400 11px/1 var(--mono);color:var(--muted);white-space:nowrap}
-.thesis{max-width:44ch;margin:0 0 30px;font:400 clamp(19px,2.2vw,24px)/1.4 var(--body);color:var(--ink-2)}
+.thesis{max-width:52ch;text-wrap:pretty;margin:0 0 30px;font:400 clamp(19px,2.2vw,24px)/1.4 var(--body);color:var(--ink-2)}
 .thesis b{font-family:var(--display);font-weight:600;font-size:1.2em;color:var(--ink);font-variant-numeric:tabular-nums}
 .notice{max-width:60ch;margin:0;padding:12px 16px;border-left:3px solid var(--should);background:var(--paper);border-radius:0 6px 6px 0}
 
